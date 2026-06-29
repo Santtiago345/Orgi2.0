@@ -53,10 +53,6 @@
         <div class="grafico-container">
             <div class="grafico-wrapper">
                 <canvas id="chart-pastel"></canvas>
-                <div class="grafico-centro" id="grafico-centro">
-                    <span class="grafico-total-label">Total</span>
-                    <span class="grafico-total-valor" id="grafico-total-valor">$0</span>
-                </div>
             </div>
         </div>
         <div class="tabla-container">
@@ -282,7 +278,6 @@ function mostrarVacia() {
     const iso = hoy.toISOString().split('T')[0];
     estado.desde = estado.hasta = iso;
     mostrarFechas(iso, iso);
-    document.getElementById('grafico-total-valor').textContent = '$0';
     document.getElementById('tabla-items').innerHTML = '<div class="tabla-vacia">Sin transacciones en este período</div>';
     document.getElementById('btn-hoy').style.display = 'none';
     actualizarGrafico([]);
@@ -291,8 +286,6 @@ function mostrarVacia() {
 function actualizarVista(data) {
     mostrarFechas(data.desde, data.hasta);
     document.getElementById('btn-hoy').style.display = data.es_actual ? 'none' : 'flex';
-    document.getElementById('grafico-total-valor').textContent = data.total_fmt;
-
     // Tabla de categorias
     const container = document.getElementById('tabla-items');
     container.innerHTML = '';
@@ -301,7 +294,7 @@ function actualizarVista(data) {
         div.className = 'tabla-item';
         div.onclick = () => abrirTxViewer(c.categoria, data.transacciones);
         div.innerHTML = `
-            <span class="tabla-item-icono" style="background:${c.color}22">${c.icono}</span>
+            <span class="tabla-item-icono" style="background:${c.color}">${c.icono}</span>
             <span class="tabla-item-cat">${c.categoria}</span>
             <span class="tabla-item-pct">${c.porcentaje}%</span>
             <span class="tabla-item-valor">$${Number(c.total).toLocaleString('es-CO')}</span>

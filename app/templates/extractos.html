@@ -27,7 +27,22 @@
 
 </div>
 
+<!-- MODAL DETALLE EXTRACTO -->
+<div class="modal-overlay" id="detalle-modal" style="display:none;" onclick="cerrarDetalle(event)">
+    <div class="modal modal-extracto" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2 id="detalle-titulo">Detalle</h2>
+            <button class="tx-viewer-cerrar" onclick="cerrarDetalle()">✕</button>
+        </div>
+        <div class="detalle-body" id="detalle-body">
+            <div class="detalle-loading">Cargando...</div>
+        </div>
+    </div>
+</div>
+
 <script>
+let extractosData = [];
+
 document.addEventListener('DOMContentLoaded', cargarExtractos);
 
 // Drag & drop
@@ -45,43 +60,21 @@ function subirPDF(file) {
         alert('Solo se aceptan archivos PDF');
         return;
     }
-
     document.getElementById('upload-card').style.display = 'none';
     document.getElementById('upload-result').style.display = 'none';
     document.getElementById('upload-progress').style.display = 'block';
-
     const formData = new FormData();
     formData.append('pdf', file);
-
     fetch('/api/upload-pdf', { method: 'POST', body: formData })
         .then(r => r.json().then(data => ({status: r.status, data})))
         .then(({status, data}) => {
             document.getElementById('upload-progress').style.display = 'none';
-
-            if (status === 409) {
-                document.getElementById('upload-card').style.display = 'block';
-                alert('Este extracto ya existe en la base de datos');
-                return;
-            }
-
-            if (status !== 200) {
-                document.getElementById('upload-card').style.display = 'block';
-                alert('Error: ' + (data.error || 'Error desconocido'));
-                return;
-            }
-
+            if (status === 409) { document.getElementById('upload-card').style.display = 'block'; alert('Este extracto ya existe en la base de datos'); return; }
+            if (status !== 200) { document.getElementById('upload-card').style.display = 'block'; alert('Error: ' + (data.error || 'Error desconocido')); return; }
             const resultDiv = document.getElementById('upload-result');
             if (data.success) {
                 const tipoLabel = data.tipo === 'tarjeta_credito' ? 'Tarjeta de Crédito' : 'Cuenta Corriente';
-                resultDiv.innerHTML = `
-                    <div class="result-ok">
-                        <span class="result-icon">✅</span>
-                        <div class="result-info">
-                            <strong>${data.archivo_original}</strong>
-                            <p>Banco: ${data.banco} | Período: ${data.periodo} | Tipo: ${tipoLabel}</p>
-                        </div>
-                    </div>
-                `;
+                resultDiv.innerHTML = `<div class="result-ok"><span class="result-icon">✅</span><div class="result-info"><strong>${data.archivo_original}</strong><p>Banco: ${data.banco} | Período: ${data.periodo} | Tipo: ${tipoLabel}</p></div></div>`;
                 resultDiv.style.display = 'block';
                 cargarExtractos();
                 document.getElementById('upload-card').style.display = 'block';
@@ -101,175 +94,217 @@ function subirPDF(file) {
 function cargarExtractos() {
     const container = document.getElementById('extractos-list');
     container.innerHTML = '<div class="extractos-loading">Cargando extractos...</div>';
-
     fetch('/api/extractos')
         .then(r => r.json())
         .then(data => {
-            if (data.length === 0) {
-                container.innerHTML = '<div class="extractos-loading">No hay extractos cargados</div>';
-                return;
-            }
-
+            extractosData = data;
+            if (data.length === 0) { container.innerHTML = '<div class="extractos-loading">No hay extractos cargados</div>'; return; }
             const grupos = {};
-            data.forEach(e => {
-                const key = e.fuente || 'desconocido';
-                if (!grupos[key]) grupos[key] = [];
-                grupos[key].push(e);
-            });
-
+            data.forEach(e => { const key = e.fuente || 'desconocido'; if (!grupos[key]) grupos[key] = []; grupos[key].push(e); });
             const orden = ['nequi', 'nu', 'rappicard'];
             const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda'};
-
             let html = '';
             orden.forEach(banco => {
                 if (!grupos[banco]) return;
-                const items = grupos[banco];
-                html += `
-                    <div class="banco-grupo">
-                        <h3 class="banco-titulo">${nombres[banco] || banco} <span class="banco-count">${items.length} extractos</span></h3>
-                        <div class="banco-lista">
-                            ${items.map(e => {
-                                const tipo = e.tipo === 'tarjeta_credito' ? '💳' : '🏦';
-                                const periodo = e.periodo || '—';
-                                const tit = e.titular || '';
-                                return `
-                                    <div class="extracto-item">
-                                        <span class="extracto-icono">${tipo}</span>
-                                        <div class="extracto-info">
-                                            <span class="extracto-periodo">${periodo}</span>
-                                            <span class="extracto-titular">${tit}</span>
-                                        </div>
-                                        <span class="extracto-txs">${e.num_transacciones || 0} tx</span>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    </div>
-                `;
+                html += `<div class="banco-grupo"><h3 class="banco-titulo">${nombres[banco] || banco} <span class="banco-count">${grupos[banco].length} extractos</span></h3><div class="banco-lista">`;
+                grupos[banco].forEach(e => {
+                    const tipo = e.tipo === 'tarjeta_credito' ? '💳' : '🏦';
+                    html += `<div class="extracto-item" onclick="abrirDetalle(${e.id})"><span class="extracto-icono">${tipo}</span><div class="extracto-info"><span class="extracto-periodo">${e.periodo || '—'}</span><span class="extracto-titular">${e.titular || ''}</span></div><span class="extracto-txs">${e.num_transacciones || 0} tx</span></div>`;
+                });
+                html += '</div></div>';
             });
-
             container.innerHTML = html;
         })
-        .catch(err => {
-            container.innerHTML = '<div class="extractos-loading">Error cargando extractos</div>';
+        .catch(() => { container.innerHTML = '<div class="extractos-loading">Error cargando extractos</div>'; });
+}
+
+function formatPesos(val) {
+    if (val == null) return '—';
+    const s = Math.abs(val).toLocaleString('es-CO', {minimumFractionDigits: 0});
+    return val < 0 ? `-$${s}` : `$${s}`;
+}
+
+function abrirDetalle(id) {
+    document.getElementById('detalle-modal').style.display = 'flex';
+    document.getElementById('detalle-body').innerHTML = '<div class="detalle-loading">Cargando...</div>';
+    fetch(`/api/extracto/${id}`)
+        .then(r => r.json())
+        .then(d => {
+            const isTC = d.es_tarjeta_credito;
+            const tipoIcon = isTC ? '💳' : '🏦';
+            const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard'};
+            const nombreBanco = nombresBanco[d.fuente] || d.fuente;
+            document.getElementById('detalle-titulo').textContent = `${tipoIcon} ${nombreBanco} — ${d.periodo}`;
+
+            let html = '';
+
+            // Info general
+            html += `<div class="detalle-info"><div class="detalle-info-row"><span class="detalle-label">Archivo</span><span class="detalle-valor">${d.archivo}</span></div>`;
+            html += `<div class="detalle-info-row"><span class="detalle-label">Titular</span><span class="detalle-valor">${d.titular || '—'}</span></div>`;
+            html += `<div class="detalle-info-row"><span class="detalle-label">Transacciones</span><span class="detalle-valor">${d.num_transacciones}</span></div></div>`;
+
+            // Tarjeta de credito metadata
+            if (isTC && d.tc_meta) {
+                const tc = d.tc_meta;
+                html += `<div class="detalle-tc"><h4 class="detalle-subtitle">💳 Información de la Tarjeta</h4><div class="tc-grid">`;
+                const rows = [
+                    ['Total a Pagar', tc.total_pagar_fmt, 'highlight'],
+                    ['Pago Mínimo', tc.pago_minimo_fmt, ''],
+                    ['Saldo Anterior', tc.saldo_anterior_fmt, ''],
+                    ['Saldo Actual', tc.saldo_actual_fmt, ''],
+                    ['Cupo Total', tc.cupo_total_fmt, ''],
+                    ['Total Cargos', formatPesos(d.total_gastos), ''],
+                    ['Total Abonos', formatPesos(d.total_ingresos), ''],
+                    ['Fecha de Corte', tc.fecha_corte || '—', ''],
+                    ['Fecha de Pago', tc.fecha_pago || '—', ''],
+                ];
+                rows.forEach(r => {
+                    html += `<div class="tc-item ${r[2]}"><span class="tc-label">${r[0]}</span><span class="tc-valor">${r[1]}</span></div>`;
+                });
+                html += `</div></div>`;
+            }
+
+            // Cuotas detectadas
+            if (d.num_cuotas > 0) {
+                html += `<div class="detalle-cuotas"><h4 class="detalle-subtitle">🔄 Compras en Cuotas (${d.num_cuotas} grupos)</h4>`;
+                const cuotasAgrupadas = {};
+                d.transacciones.filter(t => t.es_cuota).forEach(t => {
+                    const key = t.descripcion.trim().toLowerCase();
+                    if (!cuotasAgrupadas[key]) cuotasAgrupadas[key] = [];
+                    cuotasAgrupadas[key].push(t);
+                });
+                Object.values(cuotasAgrupadas).forEach(grupo => {
+                    const totalCuotas = grupo.length;
+                    const desc = grupo[0].descripcion;
+                    const valor = Math.abs(grupo[0].valor);
+                    html += `<div class="cuota-grupo"><span class="cuota-desc">${desc}</span><span class="cuota-valor">${formatPesos(valor)} × ${totalCuotas} cuotas</span></div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Resumen ingresos/egresos
+            html += `<div class="detalle-resumen"><h4 class="detalle-subtitle">Resumen</h4><div class="resumen-grid">`;
+            html += `<div class="resumen-item positivo"><span class="resumen-label">Ingresos</span><span class="resumen-valor">${d.total_ingresos_fmt}</span><span class="resumen-count">${d.num_ingresos} transacciones</span></div>`;
+            html += `<div class="resumen-item negativo"><span class="resumen-label">Egresos</span><span class="resumen-valor">${d.total_gastos_fmt}</span><span class="resumen-count">${d.num_gastos} transacciones</span></div>`;
+            html += `</div></div>`;
+
+            // Lista de transacciones
+            html += `<div class="detalle-txs"><h4 class="detalle-subtitle">Transacciones</h4>`;
+            const todas = [...d.transacciones];
+            todas.sort((a, b) => (b.fecha_date || '').localeCompare(a.fecha_date || ''));
+            todas.forEach(t => {
+                const icono = t.es_ingreso ? '💰' : '💸';
+                const cuotaTag = t.es_cuota ? '<span class="tx-cuota-badge">🔄 Cuota</span>' : '';
+                html += `<div class="detalle-tx"><span class="tx-icono">${icono}</span><div class="tx-body"><span class="tx-desc">${t.descripcion || '—'} ${cuotaTag}</span><span class="tx-fecha">${t.fecha || ''}</span></div><span class="tx-valor ${t.es_ingreso ? 'positivo' : 'negativo'}">${t.valor_fmt}</span></div>`;
+            });
+            html += `</div>`;
+
+            document.getElementById('detalle-body').innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('detalle-body').innerHTML = '<div class="detalle-loading">Error cargando detalle</div>';
         });
 }
+
+function cerrarDetalle(e) {
+    if (e && e.target && e.target !== e.currentTarget) return;
+    document.getElementById('detalle-modal').style.display = 'none';
+}
+
+// Cerrar con Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('detalle-modal');
+        if (m && m.style.display !== 'none') m.style.display = 'none';
+    }
+});
 </script>
 
 <style>
-.page-title {
-    font-size: 22px;
-    font-weight: 700;
-    margin-bottom: 24px;
-    color: var(--text);
-}
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; color: var(--text); }
 
-.upload-card {
-    background: var(--surface);
-    border: 2px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 32px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.upload-card:hover, .upload-card.drag-over {
-    border-color: var(--accent);
-    background: #f0fdf4;
-}
+.upload-card { background: var(--surface); border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-card:hover, .upload-card.drag-over { border-color: var(--accent); background: #f0fdf4; }
 .upload-icon { font-size: 48px; margin-bottom: 12px; }
 .upload-text { color: var(--text-secondary); margin-bottom: 16px; font-size: 14px; }
-.btn-upload {
-    background: var(--primary);
-    color: white;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-}
+.btn-upload { background: var(--primary); color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
 .btn-upload:hover { background: var(--primary-light); }
 
-.upload-progress {
-    text-align: center;
-    padding: 32px;
-    background: var(--surface);
-    border-radius: var(--radius);
-}
-.spinner {
-    width: 40px; height: 40px;
-    border: 4px solid var(--border);
-    border-top-color: var(--primary);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 12px;
-}
+.upload-progress { text-align: center; padding: 32px; background: var(--surface); border-radius: var(--radius); }
+.spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
 .upload-result { margin-top: 12px; }
-.result-ok {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #f0fdf4;
-    border: 1px solid #86efac;
-    border-radius: var(--radius);
-    padding: 16px;
-}
+.result-ok { display: flex; align-items: center; gap: 12px; background: #f0fdf4; border: 1px solid #86efac; border-radius: var(--radius); padding: 16px; }
 .result-icon { font-size: 24px; }
 .result-info strong { display: block; margin-bottom: 4px; color: var(--text); }
 .result-info p { font-size: 13px; color: var(--text-secondary); margin: 0; }
-.result-error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: var(--radius);
-    padding: 16px;
-    text-align: center;
-    color: var(--danger);
-}
+.result-error { background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--danger); }
 
-.banco-grupo {
-    margin-bottom: 24px;
-}
-.banco-titulo {
-    font-size: 18px;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.banco-count {
-    font-size: 13px;
-    color: var(--text-secondary);
-    font-weight: 400;
-}
-.banco-lista {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 8px;
-}
-.extracto-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    transition: all 0.2s;
-}
-.extracto-item:hover { border-color: var(--accent); }
+.banco-grupo { margin-bottom: 24px; }
+.banco-titulo { font-size: 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.banco-count { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+.banco-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.extracto-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; transition: all 0.2s; cursor: pointer; }
+.extracto-item:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(45,106,79,0.1); }
 .extracto-icono { font-size: 24px; }
 .extracto-info { flex: 1; min-width: 0; }
 .extracto-periodo { display: block; font-weight: 600; font-size: 14px; }
-.extracto-titular { display: block; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.extracto-titular { display: block; font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .extracto-txs { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.extractos-loading { text-align: center; padding: 40px; color: var(--text-secondary); }
 
-.extractos-loading {
-    text-align: center;
-    padding: 40px;
-    color: var(--text-secondary);
+/* MODAL EXTRACTO */
+.modal-extracto { max-width: 640px; max-height: 85vh; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 1; }
+.modal-header h2 { font-size: 17px; }
+.detalle-body { padding: 16px 20px 20px; overflow-y: auto; flex: 1; }
+.detalle-loading { text-align: center; padding: 32px; color: var(--text-secondary); }
+
+.detalle-info { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; padding: 12px; background: var(--bg); border-radius: 8px; }
+.detalle-info-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.detalle-label { color: var(--text-secondary); }
+.detalle-valor { font-weight: 500; }
+
+.detalle-subtitle { font-size: 14px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+.detalle-tc { margin-bottom: 16px; }
+.tc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tc-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 13px; }
+.tc-item.highlight { background: #e8f5e9; border: 1px solid #c8e6c9; }
+.tc-label { color: var(--text-secondary); }
+.tc-valor { font-weight: 700; color: var(--text); }
+
+.detalle-cuotas { margin-bottom: 16px; }
+.cuota-grupo { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; margin-bottom: 4px; font-size: 13px; }
+.cuota-desc { font-weight: 500; }
+.cuota-valor { color: var(--primary); font-weight: 600; }
+
+.detalle-resumen { margin-bottom: 16px; }
+.resumen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.resumen-item { padding: 12px; border-radius: 8px; text-align: center; }
+.resumen-item.positivo { background: #f0fdf4; border: 1px solid #86efac; }
+.resumen-item.negativo { background: #fef2f2; border: 1px solid #fecaca; }
+.resumen-label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 2px; }
+.resumen-valor { display: block; font-weight: 700; font-size: 20px; }
+.resumen-item.positivo .resumen-valor { color: #16a34a; }
+.resumen-item.negativo .resumen-valor { color: #dc2626; }
+.resumen-count { display: block; font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+.detalle-tx { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.detalle-tx:last-child { border-bottom: none; }
+.tx-icono { font-size: 16px; margin-top: 1px; }
+.tx-body { flex: 1; min-width: 0; }
+.tx-desc { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-fecha { display: block; font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+.tx-cuota-badge { display: inline-block; font-size: 10px; background: #fff7ed; color: #c2410c; padding: 1px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
+.tx-valor { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.tx-valor.positivo { color: #16a34a; }
+.tx-valor.negativo { color: #dc2626; }
+
+@media (max-width: 768px) {
+    .modal-extracto { max-width: 100%; margin: 8px; max-height: 90vh; }
+    .tc-grid { grid-template-columns: 1fr; }
+    .resumen-grid { grid-template-columns: 1fr; }
+    .banco-lista { grid-template-columns: 1fr; }
 }
 </style>
 {% endblock %}

@@ -6,7 +6,7 @@ from .database import (
     calcular_balance, obtener_rango_fechas, navegar_periodo, es_periodo_actual,
     obtener_transacciones_por_periodo, obtener_gastos_por_categoria,
     agregar_transaccion, obtener_ultima_fecha, obtener_extractos,
-    buscar_extracto_duplicado
+    buscar_extracto_duplicado, obtener_extracto_detalle
 )
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +40,12 @@ CATEGORIAS = [
 
 
 def formatear_pesos(valor):
+    negativo = valor < 0
+    s = f"{abs(valor):,.0f}".replace(",", ".")
+    return f"-${s}" if negativo else f"${s}"
+
+def formatear_pesos_linea(valor):
+    """Formatea sin decimales para lineas de detalle."""
     negativo = valor < 0
     s = f"{abs(valor):,.0f}".replace(",", ".")
     return f"-${s}" if negativo else f"${s}"
@@ -93,29 +99,7 @@ def api_resumen():
     if not desde or not hasta:
         desde, hasta = obtener_rango_fechas(periodo)
 
-    categorias = obtener_gastos_por_categoria(tipo, desde, hasta)
-    transacciones = obtener_transacciones_por_periodo(tipo, desde, hasta)
-    total = sum(c["total"] for c in categorias)
-    es_actual = es_periodo_actual(periodo, desde, hasta)
-
-    return jsonify({
-        "total": round(total, 2),
-        "total_fmt": formatear_pesos(total),
-        "desde": desde.isoformat(),
-        "hasta": hasta.isoformat(),
-        "categorias": [{
-            **c,
-            "porcentaje": round(c["total"] / total * 100, 1) if total > 0 else 0,
-            "icono": icono_categoria(c["categoria"]),
-            "color": next((x["color"] for x in CATEGORIAS if x["id"] == c["categoria"]), "#C9CBCF")
-        } for c in categorias],
-        "transacciones": [
-            {**t, "valor_fmt": formatear_pesos(t["valor"])}
-            for t in transacciones
-        ],
-        "num_transacciones": len(transacciones),
-        "es_actual": es_actual,
-    })
+    return api_resumen_params(tipo, periodo, desde, hasta)
 
 
 @app.route("/api/navegar")
@@ -135,11 +119,30 @@ def api_navegar():
     return api_resumen_params(tipo, periodo, desde, hasta)
 
 
+def deduplicar_cuotas(transacciones):
+    """Agrupa cuotas (misma entidad+descripcion+abs(valor)) en una transaccion."""
+    grupos = {}
+    for t in transacciones:
+        key = (t["entidad"], t["descripcion"].strip().lower(), round(abs(t["valor"]), 2))
+        grupos.setdefault(key, []).append(t)
+    result = []
+    for key, group in grupos.items():
+        if len(group) > 1:
+            t = dict(group[0])
+            t["descripcion"] = f"{t['descripcion']} (x{len(group)})"
+            result.append(t)
+        else:
+            result.append(group[0])
+    return result
+
 def api_resumen_params(tipo, periodo, desde, hasta):
     categorias = obtener_gastos_por_categoria(tipo, desde, hasta)
     transacciones = obtener_transacciones_por_periodo(tipo, desde, hasta)
     total = sum(c["total"] for c in categorias)
     es_actual = es_periodo_actual(periodo, desde, hasta)
+
+    # Deduplicar cuotas en la vista de transacciones (no en totales por categoria)
+    transacciones = deduplicar_cuotas(transacciones)
 
     return jsonify({
         "total": round(total, 2),
@@ -196,6 +199,69 @@ def api_agregar_transaccion():
 def api_extractos():
     extractos = obtener_extractos()
     return jsonify(extractos)
+
+
+@app.route("/api/extracto/<int:extracto_id>")
+def api_extracto_detalle(extracto_id):
+    data = obtener_extracto_detalle(extracto_id)
+    if not data:
+        return jsonify({"error": "Extracto no encontrado"}), 404
+
+    extr = data["extracto"]
+    es_tc = extr["fuente"] in ("rappicard", "nu")
+    tc_meta = None
+    if es_tc:
+        tc_meta = {
+            "total_pagar": extr.get("total_pagar"),
+            "total_pagar_fmt": formatear_pesos(extr["total_pagar"]) if extr.get("total_pagar") else None,
+            "pago_minimo": extr.get("pago_minimo"),
+            "pago_minimo_fmt": formatear_pesos(extr["pago_minimo"]) if extr.get("pago_minimo") else None,
+            "cupo_total": extr.get("cupo_total"),
+            "cupo_total_fmt": formatear_pesos(extr["cupo_total"]) if extr.get("cupo_total") else None,
+            "saldo_anterior": extr.get("saldo_anterior"),
+            "saldo_anterior_fmt": formatear_pesos(extr["saldo_anterior"]) if extr.get("saldo_anterior") else None,
+            "saldo_actual": extr.get("saldo_actual"),
+            "saldo_actual_fmt": formatear_pesos(extr["saldo_actual"]) if extr.get("saldo_actual") else None,
+            "total_cargos": extr.get("total_cargos"),
+            "total_abonos": extr.get("total_abonos"),
+            "fecha_corte": extr.get("fecha_corte"),
+            "fecha_pago": extr.get("fecha_pago"),
+        }
+
+    return jsonify({
+        "id": extr["id"],
+        "archivo": extr["archivo"],
+        "fuente": extr["fuente"],
+        "tipo": extr["tipo"],
+        "periodo": extr["periodo"],
+        "titular": extr["titular"],
+        "num_transacciones": extr["num_transacciones"],
+        "es_tarjeta_credito": es_tc,
+        "tc_meta": tc_meta,
+        "transacciones": [
+            {**t, "valor_fmt": formatear_pesos_linea(t["valor"]),
+             "es_cuota": any(
+                 c["descripcion"] == t["descripcion"] and abs(c["valor"]) == abs(t["valor"])
+                 for c in data["cuotas"]
+             )}
+            for t in data["transacciones"]
+        ],
+        "ingresos": [
+            {**t, "valor_fmt": formatear_pesos_linea(t["valor"])}
+            for t in data["ingresos"]
+        ],
+        "gastos": [
+            {**t, "valor_fmt": formatear_pesos_linea(t["valor"])}
+            for t in data["gastos"]
+        ],
+        "total_ingresos": data["total_ingresos"],
+        "total_ingresos_fmt": formatear_pesos(data["total_ingresos"]),
+        "total_gastos": data["total_gastos"],
+        "total_gastos_fmt": formatear_pesos(data["total_gastos"]),
+        "num_ingresos": data["num_ingresos"],
+        "num_gastos": data["num_gastos"],
+        "num_cuotas": data["num_cuotas"],
+    })
 
 
 @app.route("/api/upload-pdf", methods=["POST"])

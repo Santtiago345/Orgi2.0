@@ -145,3 +145,55 @@ def buscar_extracto_duplicado(archivo_nombre):
     count = c.fetchone()[0]
     conn.close()
     return count > 0
+
+def obtener_extracto_detalle(extracto_id):
+    """Retorna un extracto con sus transacciones."""
+    conn = get_db()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM extractos WHERE id=?", (extracto_id,))
+    extr = c.fetchone()
+    if not extr:
+        conn.close()
+        return None
+    extr = dict(extr)
+
+    c.execute("""
+        SELECT id, fecha, fecha_date, descripcion, valor, categoria, entidad, es_ingreso, notas
+        FROM transacciones
+        WHERE extracto_id=?
+        ORDER BY fecha_date DESC
+    """, (extracto_id,))
+    txs = [dict(r) for r in c.fetchall()]
+
+    ingresos = [t for t in txs if t['es_ingreso'] == 1]
+    gastos = [t for t in txs if t['es_ingreso'] == 0]
+    total_ingresos = round(sum(t['valor'] for t in ingresos), 2)
+    total_gastos = round(sum(abs(t['valor']) for t in gastos), 2)
+
+    cuotas = []
+    if extr['fuente'] in ('rappicard', 'nu'):
+        desc_counts = {}
+        for t in txs:
+            key = (t['descripcion'].strip().lower(), abs(t['valor']))
+            desc_counts[key] = desc_counts.get(key, 0) + 1
+        multi = {k for k, v in desc_counts.items() if v > 1}
+        for t in txs:
+            key = (t['descripcion'].strip().lower(), abs(t['valor']))
+            if key in multi:
+                cuotas.append(t)
+
+    conn.close()
+    return {
+        "extracto": extr,
+        "transacciones": txs,
+        "ingresos": ingresos,
+        "gastos": gastos,
+        "total_ingresos": total_ingresos,
+        "total_gastos": total_gastos,
+        "num_ingresos": len(ingresos),
+        "num_gastos": len(gastos),
+        "cuotas": cuotas,
+        "num_cuotas": len(set((t['descripcion'], abs(t['valor'])) for t in cuotas)),
+    }
