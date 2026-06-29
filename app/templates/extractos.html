@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page" id="page-extractos">
+
+    <h2 class="page-title">Extractos Bancarios</h2>
+
+    <!-- SUBIR PDF -->
+    <section class="upload-section">
+        <div class="upload-card" id="upload-card">
+            <div class="upload-icon">📄</div>
+            <p class="upload-text">Arrastra un PDF aquí o haz clic para seleccionar</p>
+            <input type="file" id="pdf-upload-input" accept=".pdf" style="display:none" onchange="subirPDF(this.files[0])">
+            <button class="btn-upload" onclick="document.getElementById('pdf-upload-input').click()">Seleccionar PDF</button>
+        </div>
+        <div id="upload-progress" class="upload-progress" style="display:none;">
+            <div class="spinner"></div>
+            <p>Procesando extracto...</p>
+        </div>
+        <div id="upload-result" class="upload-result" style="display:none;"></div>
+    </section>
+
+    <!-- LISTADO POR BANCO -->
+    <section class="extractos-list" id="extractos-list">
+        <div class="extractos-loading">Cargando extractos...</div>
+    </section>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', cargarExtractos);
+
+// Drag & drop
+const uploadCard = document.getElementById('upload-card');
+uploadCard.addEventListener('dragover', e => { e.preventDefault(); uploadCard.classList.add('drag-over'); });
+uploadCard.addEventListener('dragleave', () => uploadCard.classList.remove('drag-over'));
+uploadCard.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadCard.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) subirPDF(e.dataTransfer.files[0]);
+});
+
+function subirPDF(file) {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Solo se aceptan archivos PDF');
+        return;
+    }
+
+    document.getElementById('upload-card').style.display = 'none';
+    document.getElementById('upload-result').style.display = 'none';
+    document.getElementById('upload-progress').style.display = 'block';
+
+    const formData = new FormData();
+    formData.append('pdf', file);
+
+    fetch('/api/upload-pdf', { method: 'POST', body: formData })
+        .then(r => r.json().then(data => ({status: r.status, data})))
+        .then(({status, data}) => {
+            document.getElementById('upload-progress').style.display = 'none';
+
+            if (status === 409) {
+                document.getElementById('upload-card').style.display = 'block';
+                alert('Este extracto ya existe en la base de datos');
+                return;
+            }
+
+            if (status !== 200) {
+                document.getElementById('upload-card').style.display = 'block';
+                alert('Error: ' + (data.error || 'Error desconocido'));
+                return;
+            }
+
+            const resultDiv = document.getElementById('upload-result');
+            if (data.success) {
+                const tipoLabel = data.tipo === 'tarjeta_credito' ? 'Tarjeta de Crédito' : 'Cuenta Corriente';
+                resultDiv.innerHTML = `
+                    <div class="result-ok">
+                        <span class="result-icon">✅</span>
+                        <div class="result-info">
+                            <strong>${data.archivo_original}</strong>
+                            <p>Banco: ${data.banco} | Período: ${data.periodo} | Tipo: ${tipoLabel}</p>
+                        </div>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+                cargarExtractos();
+                document.getElementById('upload-card').style.display = 'block';
+            } else {
+                resultDiv.innerHTML = `<div class="result-error">❌ Error procesando el PDF</div>`;
+                resultDiv.style.display = 'block';
+                document.getElementById('upload-card').style.display = 'block';
+            }
+        })
+        .catch(err => {
+            document.getElementById('upload-progress').style.display = 'none';
+            document.getElementById('upload-card').style.display = 'block';
+            alert('Error de conexión: ' + err);
+        });
+}
+
+function cargarExtractos() {
+    const container = document.getElementById('extractos-list');
+    container.innerHTML = '<div class="extractos-loading">Cargando extractos...</div>';
+
+    fetch('/api/extractos')
+        .then(r => r.json())
+        .then(data => {
+            if (data.length === 0) {
+                container.innerHTML = '<div class="extractos-loading">No hay extractos cargados</div>';
+                return;
+            }
+
+            const grupos = {};
+            data.forEach(e => {
+                const key = e.fuente || 'desconocido';
+                if (!grupos[key]) grupos[key] = [];
+                grupos[key].push(e);
+            });
+
+            const orden = ['nequi', 'nu', 'rappicard'];
+            const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda'};
+
+            let html = '';
+            orden.forEach(banco => {
+                if (!grupos[banco]) return;
+                const items = grupos[banco];
+                html += `
+                    <div class="banco-grupo">
+                        <h3 class="banco-titulo">${nombres[banco] || banco} <span class="banco-count">${items.length} extractos</span></h3>
+                        <div class="banco-lista">
+                            ${items.map(e => {
+                                const tipo = e.tipo === 'tarjeta_credito' ? '💳' : '🏦';
+                                const periodo = e.periodo || '—';
+                                const tit = e.titular || '';
+                                return `
+                                    <div class="extracto-item">
+                                        <span class="extracto-icono">${tipo}</span>
+                                        <div class="extracto-info">
+                                            <span class="extracto-periodo">${periodo}</span>
+                                            <span class="extracto-titular">${tit}</span>
+                                        </div>
+                                        <span class="extracto-txs">${e.num_transacciones || 0} tx</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        })
+        .catch(err => {
+            container.innerHTML = '<div class="extractos-loading">Error cargando extractos</div>';
+        });
+}
+</script>
+
+<style>
+.page-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: var(--text);
+}
+
+.upload-card {
+    background: var(--surface);
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.upload-card:hover, .upload-card.drag-over {
+    border-color: var(--accent);
+    background: #f0fdf4;
+}
+.upload-icon { font-size: 48px; margin-bottom: 12px; }
+.upload-text { color: var(--text-secondary); margin-bottom: 16px; font-size: 14px; }
+.btn-upload {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-upload:hover { background: var(--primary-light); }
+
+.upload-progress {
+    text-align: center;
+    padding: 32px;
+    background: var(--surface);
+    border-radius: var(--radius);
+}
+.spinner {
+    width: 40px; height: 40px;
+    border: 4px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.upload-result { margin-top: 12px; }
+.result-ok {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: var(--radius);
+    padding: 16px;
+}
+.result-icon { font-size: 24px; }
+.result-info strong { display: block; margin-bottom: 4px; color: var(--text); }
+.result-info p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+.result-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+    color: var(--danger);
+}
+
+.banco-grupo {
+    margin-bottom: 24px;
+}
+.banco-titulo {
+    font-size: 18px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.banco-count {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+.banco-lista {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
+}
+.extracto-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+.extracto-item:hover { border-color: var(--accent); }
+.extracto-icono { font-size: 24px; }
+.extracto-info { flex: 1; min-width: 0; }
+.extracto-periodo { display: block; font-weight: 600; font-size: 14px; }
+.extracto-titular { display: block; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.extracto-txs { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+
+.extractos-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+</style>
+{% endblock %}
