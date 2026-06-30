@@ -8,5 +8,5 @@ echo.
 echo Monitoreando: data\inbox\
 echo Para detener: cierra esta ventana o presiona Ctrl+C
 echo.
-python scripts\observar_inbox.py --silent
+python pipeline\observar_inbox.py --silent
 pause

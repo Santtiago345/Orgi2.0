@@ -296,7 +296,7 @@ def api_upload_pdf():
     # Ejecutar procesamiento
     try:
         result = subprocess.run(
-            [sys.executable, os.path.join(BASE, "scripts", "procesar_inbox.py"), "--inbox-only"],
+            [sys.executable, os.path.join(BASE, "pipeline", "procesar_inbox.py"), "--inbox-only"],
             capture_output=True, text=True, timeout=120
         )
         output = result.stdout + result.stderr

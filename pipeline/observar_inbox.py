@@ -7,10 +7,10 @@ el pipeline de procesamiento.
 
 USO:
   # Ventana normal (visible)
-  python scripts/observar_inbox.py
+  python pipeline/observar_inbox.py
 
   # Ventana minimizada (usar con el .bat)
-  python scripts/observar_inbox.py --silent
+  python pipeline/observar_inbox.py --silent
 
   # Cerrar con Ctrl+C
 """

@@ -15,9 +15,9 @@ FLUJO:
      c. analisis_tarjetas_completo.py → reportes por entidad
 
 USO:
-  python scripts/procesar_inbox.py
-  python scripts/procesar_inbox.py --pipeline-only   (solo reprocesar, sin inbox)
-  python scripts/procesar_inbox.py --inbox-only      (solo procesar inbox, sin pipeline)
+  python pipeline/procesar_inbox.py
+  python pipeline/procesar_inbox.py --pipeline-only   (solo reprocesar, sin inbox)
+  python pipeline/procesar_inbox.py --inbox-only      (solo procesar inbox, sin pipeline)
 """
 
 import os, re, sys, shutil, subprocess
@@ -339,12 +339,12 @@ def ejecutar_pipeline():
     ]
 
     for script, desc in scripts:
-        ruta = os.path.join(BASE, "scripts", script)
+        ruta = os.path.join(BASE, "analysis", script)
         if not os.path.exists(ruta):
             print(f"  [SKIP] {script} no encontrado")
             continue
         print(f"\n  --- {desc} ---")
-        print(f"  Ejecutando: python scripts/{script}")
+        print(f"  Ejecutando: python analysis/{script}")
         try:
             resultado = subprocess.run(
                 [sys.executable, ruta],

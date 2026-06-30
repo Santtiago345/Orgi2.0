@@ -10,15 +10,15 @@
   La ventana debe permanecer ABIERTA. Para cerrar: Ctrl+C.
 
 .EXAMPLE
-  .\scripts\observar_inbox.ps1
-  .\scripts\observar_inbox.ps1 -Silent
+  .\pipeline\observar_inbox.ps1
+  .\pipeline\observar_inbox.ps1 -Silent
 #>
 
 param([switch]$Silent)
 
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $InboxPath    = Join-Path $ProjectRoot "data\inbox"
-$PythonScript = Join-Path $ProjectRoot "scripts\procesar_inbox.py"
+$PythonScript = Join-Path $ProjectRoot "pipeline\procesar_inbox.py"
 
 function Write-Log($msg) {
     Write-Host ("[{0:yyyy-MM-dd HH:mm:ss}] {1}" -f (Get-Date), $msg)
