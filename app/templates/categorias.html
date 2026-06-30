@@ -301,18 +301,37 @@ function cargarCatTx() {
                 const fecha = t.fecha_date ? new Date(t.fecha_date + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : t.fecha;
                 const metodoLabel = {efectivo: '💵', tarjeta_credito: '💳', transferencia: '🏦'}[t.metodo_pago] || '';
                 const notas = t.notas ? `<div class="tx-nota">📝 ${t.notas}</div>` : '';
-                const descCorta = (t.descripcion || '—').substring(0, 30);
                 const tags = (t.tags || []).map(tag => `<span class="tag-badge" style="background:${tag.color}20;color:${tag.color};border-color:${tag.color}">${tag.nombre}</span>`).join(' ');
-                return `<div class="detalle-tx">
+                let cuotaBadge = '';
+                if (t.es_cuota && t.cuota_info) {
+                    cuotaBadge = `<span class="tx-cuota-badge">${t.cuota_info.cuota_actual}/${t.cuota_info.total_cuotas}</span>`;
+                }
+                return `<div class="detalle-tx" onclick="abrirDetalleTx(this, ${t.id})">
                     <span class="tx-icono">${metodoLabel}</span>
                     <div class="tx-body">
-                        <span class="tx-desc">${t.descripcion || '—'}</span>
+                        <span class="tx-desc">${t.descripcion || '—'} ${cuotaBadge}</span>
                         <span class="tx-fecha">${fecha}</span>
                         ${notas}
                         ${tags ? `<div class="tx-tags">${tags}</div>` : ''}
                     </div>
                     <span class="tx-valor ${t.valor < 0 ? 'negativo' : 'positivo'}">${t.valor_fmt}</span>
-                    <button class="btn-icon btn-tag" onclick="event.stopPropagation();abrirAsignarEtiquetas(${t.id}, '${descCorta.replace(/'/g, "\\'")}')" title="Etiquetas">🏷️</button>
+                    <button class="btn-icon btn-tag" onclick="event.stopPropagation();abrirDetalleTx(this, ${t.id})" title="Detalle">🔍</button>
+                    <div class="tx-detail" id="tx-detail-cat-${t.id}" style="display:none">
+                        <div class="tx-detail-inner">
+                            <div class="tx-detail-row"><span>Método</span><span>${metodoLabel} ${t.metodo_pago || '—'}</span></div>
+                            <div class="tx-detail-row"><span>Entidad</span><span>${t.entidad || '—'}</span></div>
+                            ${t.notas ? `<div class="tx-detail-row"><span>Notas</span><span>📝 ${t.notas}</span></div>` : ''}
+                            ${t.es_cuota && t.cuota_info ? `
+                            <div class="tx-detail-row"><span>Cuota</span><span>${t.cuota_info.cuota_actual} de ${t.cuota_info.total_cuotas}</span></div>
+                            <div class="tx-detail-row"><span>Valor total</span><span>$${Number(t.cuota_info.valor_total || 0).toLocaleString('es-CO')}</span></div>
+                            <div class="tx-detail-row"><span>Compra</span><span>${t.cuota_info.compra_desc}</span></div>
+                            ` : ''}
+                            ${tags ? `<div class="tx-detail-row"><span>Etiquetas</span><span>${tags}</span></div>` : ''}
+                            <div class="tx-detail-actions">
+                                <button class="btn-icon" onclick="event.stopPropagation();abrirAsignarEtiquetasCat(${t.id})" title="Etiquetas">🏷️</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>`;
             }).join('');
         })
@@ -471,6 +490,58 @@ function toggleEtiquetaTx(txId, etqId, asignada) {
             body: JSON.stringify({etiqueta_id: etqId})
         }).then(r => r.json()).then(() => renderTagAsignacion());
     }
+}
+
+// ─── TX DETAIL EXPAND ─────────────────────────────────────
+function abrirDetalleTx(el, txId) {
+    const detail = document.getElementById('tx-detail-cat-' + txId);
+    if (!detail) return;
+    document.querySelectorAll('.tx-detail[id^="tx-detail-cat-"]').forEach(d => {
+        if (d.id !== 'tx-detail-cat-' + txId) d.style.display = 'none';
+    });
+    detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+}
+
+function abrirAsignarEtiquetasCat(txId) {
+    const detail = document.getElementById('tx-detail-cat-' + txId);
+    if (!detail) return;
+    const actionsDiv = detail.querySelector('.tx-detail-actions');
+    if (!actionsDiv) return;
+    const existing = detail.querySelector('.tx-detail-tag-picker');
+    if (existing) { existing.remove(); return; }
+    if (typeof etiquetasData === 'undefined' || etiquetasData.length === 0) {
+        alert('No hay etiquetas. Crea una primero.');
+        return;
+    }
+    const picker = document.createElement('div');
+    picker.className = 'tx-detail-tag-picker';
+    actionsDiv.appendChild(picker);
+    fetch('/api/transacciones/' + txId + '/etiquetas')
+        .then(r => r.json())
+        .then(txTags => {
+            const tagIds = txTags.map(tg => tg.id);
+            picker.innerHTML = etiquetasData.map(e => {
+                const assigned = tagIds.includes(e.id);
+                return `<button class="tag-pick-btn ${assigned ? 'assigned' : ''}"
+                    data-etq-id="${e.id}"
+                    style="background:${e.color}20;border-color:${e.color}"
+                    onclick="toggleTagTxCat(${txId}, ${e.id}, this)">
+                    <span style="color:${e.color}">${e.nombre}</span>
+                </button>`;
+            }).join('');
+        });
+}
+
+function toggleTagTxCat(txId, etqId, btn) {
+    const assigned = btn.classList.contains('assigned');
+    const method = assigned ? 'DELETE' : 'POST';
+    const url = assigned
+        ? '/api/transacciones/' + txId + '/etiquetas/' + etqId
+        : '/api/transacciones/' + txId + '/etiquetas';
+    const body = assigned ? undefined : JSON.stringify({etiqueta_id: etqId});
+    fetch(url, {method, headers: {'Content-Type': 'application/json'}, body})
+        .then(r => r.json())
+        .then(() => btn.classList.toggle('assigned'));
 }
 
 // Multi-select helper

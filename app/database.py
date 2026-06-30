@@ -153,33 +153,40 @@ def buscar_extracto_duplicado(archivo_nombre):
 
 # ─── CUOTA DETECTION ─────────────────────────────────────────
 
-def compute_cuota_adjustments(conn=None):
-    """Return {transaccion_id: valor_cuota_mensual} for all TC transactions in cuotas."""
+def obtener_cuota_info(conn=None):
+    """Return {transaccion_id: {cuota_actual, total_cuotas, compra_desc, valor_total}}
+    for all TC transactions that are part of a cuota plan."""
     own_conn = False
     if conn is None:
         conn = get_db()
         own_conn = True
     c = conn.cursor()
+    # Join transacciones -> cuotas_tc -> compras_tc via extracto_id + valor match + normalized descripcion
     c.execute("""
-        SELECT id, entidad, descripcion, ABS(valor) as abs_val
-        FROM transacciones
-        WHERE entidad IN ('nu','rappicard') AND valor < 0
-        ORDER BY descripcion, ABS(valor), fecha_date
+        SELECT t.id as tx_id,
+               c.cuota_numero as cuota_actual,
+               cp.total_cuotas,
+               cp.valor_total,
+               cp.descripcion as compra_desc
+        FROM transacciones t
+        JOIN cuotas_tc c ON t.extracto_id = c.extracto_id
+            AND ROUND(ABS(t.valor)) = ROUND(ABS(c.capital_facturado))
+        JOIN compras_tc cp ON c.compra_id = cp.id
+            AND UPPER(TRIM(t.descripcion)) = cp.descripcion
+        WHERE t.entidad IN ('nu','rappicard')
+          AND t.valor < 0
     """)
-    all_tc = [dict(r) for r in c.fetchall()]
-    adjustments = {}
-    groups = {}
-    for t in all_tc:
-        key = (t['entidad'], t['descripcion'].strip().lower(), round(t['abs_val'], 2))
-        groups.setdefault(key, []).append(t['id'])
-    for key, ids in groups.items():
-        if len(ids) > 1:
-            monthly = -key[2] / len(ids)
-            for tid in ids:
-                adjustments[tid] = round(monthly)
+    info = {}
+    for r in c.fetchall():
+        info[r['tx_id']] = {
+            'cuota_actual': r['cuota_actual'],
+            'total_cuotas': r['total_cuotas'],
+            'compra_desc': r['compra_desc'],
+            'valor_total': r['valor_total'],
+        }
     if own_conn:
         conn.close()
-    return adjustments
+    return info
 
 # ─── ETIQUETAS ────────────────────────────────────────────────
 

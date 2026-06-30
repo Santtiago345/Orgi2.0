@@ -7,7 +7,7 @@ from .database import (
     obtener_transacciones_por_periodo, obtener_gastos_por_categoria,
     agregar_transaccion, obtener_ultima_fecha, obtener_extractos,
     buscar_extracto_duplicado, obtener_extracto_detalle,
-    compute_cuota_adjustments,
+    obtener_cuota_info,
     obtener_etiquetas, crear_etiqueta, actualizar_etiqueta, eliminar_etiqueta,
     obtener_etiquetas_transaccion, asignar_etiqueta, quitar_etiqueta,
     obtener_categorias_lista, obtener_transacciones_por_categoria,
@@ -145,9 +145,12 @@ def api_navegar():
 def deduplicar_cuotas(transacciones):
     grupos = {}
     for t in transacciones:
+        # Don't deduplicate cuota transactions (show each cuota individually)
+        if t.get("es_cuota"):
+            continue
         key = (t["entidad"], t["descripcion"].strip().lower(), round(abs(t["valor"]), 2))
         grupos.setdefault(key, []).append(t)
-    result = []
+    result = [t for t in transacciones if t.get("es_cuota")]
     for key, group in grupos.items():
         if len(group) > 1:
             t = dict(group[0])
@@ -164,14 +167,13 @@ def api_resumen_params(tipo, periodo, desde, hasta):
     total = sum(c["total"] for c in categorias)
     es_actual = es_periodo_actual(periodo, desde, hasta)
 
-    adjustments = compute_cuota_adjustments()
+    cuota_info = obtener_cuota_info()
     for t in transacciones:
-        if t["id"] in adjustments:
-            t["valor_original"] = t["valor"]
-            t["valor"] = adjustments[t["id"]]
-            t["es_cuota"] = True
-        else:
-            t["es_cuota"] = False
+        ci = cuota_info.get(t["id"])
+        t["es_cuota"] = ci is not None and ci["total_cuotas"] > 1
+        if ci and ci["total_cuotas"] > 1:
+            t["cuota_info"] = ci
+            t["valor_original"] = ci["valor_total"]
 
     transacciones_dedup = deduplicar_cuotas(transacciones)
 
@@ -192,6 +194,7 @@ def api_resumen_params(tipo, periodo, desde, hasta):
              "valor_original_fmt": formatear_pesos(t["valor_original"]) if t.get("valor_original") else None}
             for t in transacciones_dedup
         ],
+        "cuota_info": cuota_info,
         "num_transacciones": len(transacciones_dedup),
         "es_actual": es_actual,
     })
@@ -451,6 +454,12 @@ def api_categorias_transacciones():
         hasta = date.fromisoformat(hasta_str)
 
     txs = obtener_transacciones_por_categoria(categoria, desde, hasta, metodo_pago, orden, desc)
+    cuota_info = obtener_cuota_info()
+    for t in txs:
+        ci = cuota_info.get(t["id"])
+        t["es_cuota"] = ci is not None and ci["total_cuotas"] > 1
+        if ci and ci["total_cuotas"] > 1:
+            t["cuota_info"] = ci
     total = round(sum(abs(t["valor"]) for t in txs))
     return jsonify({
         "transacciones": [{**t, "valor_fmt": formatear_pesos(t["valor"])} for t in txs],

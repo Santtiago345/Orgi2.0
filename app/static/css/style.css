@@ -668,6 +668,22 @@ body {
 .btn-guardar { background: var(--primary); color: white; }
 .btn-guardar:hover { background: var(--primary-light); }
 
+/* ─── TX DETAIL EXPAND ─── */
+.tx-item { position: relative; }
+.tx-detail { padding: 8px 12px 12px; margin-top: 4px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+.tx-detail-inner { display: flex; flex-direction: column; gap: 6px; }
+.tx-detail-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.tx-detail-row span:first-child { color: var(--text-secondary); }
+.tx-detail-row span:last-child { font-weight: 500; text-align: right; }
+.tx-detail-actions { display: flex; gap: 6px; margin-top: 4px; justify-content: flex-end; }
+
+.tx-cuota-badge { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--accent); color: white; font-weight: 700; margin-left: 4px; vertical-align: middle; }
+
+.tx-detail-tag-picker { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.tag-pick-btn { padding: 4px 8px; border: 2px solid var(--border); border-radius: 6px; background: var(--bg); cursor: pointer; font-size: 12px; }
+.tag-pick-btn.assigned { border-color: var(--primary); background: var(--primary)10; }
+.tag-pick-btn:hover { border-color: var(--accent); }
+
 /* ─── RESPONSIVE ─── */
 @media (max-width: 768px) {
     .header-inner { padding: 10px 16px; gap: 6px; }
