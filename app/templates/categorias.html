@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page" id="page-categorias">
+    <div class="page-header">
+        <h2 class="page-title">Categorias</h2>
+        <div class="page-header-actions">
+            <button class="btn-secondary btn-sm" onclick="abrirModalEtiquetas()">🏷️ Etiquetas</button>
+            <button class="btn-primary" onclick="abrirModalCategoria()">+ Nueva</button>
+        </div>
+    </div>
+
+    <div class="cat-grid" id="cat-grid">
+        <div class="cat-loading">Cargando categorias...</div>
+    </div>
+</div>
+
+<!-- MODAL NUEVA/EDITAR CATEGORIA -->
+<div class="modal-overlay" id="modal-categoria" style="display:none;" onclick="cerrarModalCategoria(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h2 class="modal-titulo" id="modal-cat-titulo">Nueva Categoria</h2>
+        <form id="form-categoria" onsubmit="guardarCategoria(event)">
+            <input type="hidden" id="form-cat-nombre-original">
+            <div class="modal-campo">
+                <label>Nombre</label>
+                <input type="text" id="form-cat-nombre" required>
+            </div>
+            <div class="modal-campo">
+                <label>Icono (emoji)</label>
+                <input type="text" id="form-cat-icono" placeholder="🍽️" maxlength="10">
+            </div>
+            <div class="modal-campo">
+                <label>Color</label>
+                <div class="color-picker-row">
+                    <input type="color" id="form-cat-color" value="#FF6384">
+                    <span class="color-hex" id="form-cat-color-hex">#FF6384</span>
+                </div>
+            </div>
+            <div class="modal-acciones">
+                <button type="button" class="btn-cancelar" onclick="cerrarModalCategoria()">Cancelar</button>
+                <button type="submit" class="btn-guardar">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL GESTION DE ETIQUETAS -->
+<div class="modal-overlay" id="modal-etiquetas" style="display:none;" onclick="cerrarModalEtiquetas(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2 class="modal-titulo">Gestionar Etiquetas</h2>
+            <button class="tx-viewer-cerrar" onclick="cerrarModalEtiquetas()">✕</button>
+        </div>
+        <div class="etiquetas-toolbar">
+            <button class="btn-primary btn-sm" onclick="abrirNuevaEtiqueta()">+ Nueva</button>
+        </div>
+        <div class="etiquetas-lista" id="etiquetas-lista">
+            <div class="detalle-loading">Cargando...</div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL NUEVA/EDITAR ETIQUETA -->
+<div class="modal-overlay" id="modal-etiqueta-form" style="display:none;" onclick="cerrarModalEtiquetaForm(event)">
+    <div class="modal modal-small" onclick="event.stopPropagation()">
+        <h2 class="modal-titulo" id="modal-etq-titulo">Nueva Etiqueta</h2>
+        <form id="form-etiqueta" onsubmit="guardarEtiqueta(event)">
+            <input type="hidden" id="form-etq-id">
+            <div class="modal-campo">
+                <label>Nombre</label>
+                <input type="text" id="form-etq-nombre" required>
+            </div>
+            <div class="modal-campo">
+                <label>Color</label>
+                <div class="color-picker-row">
+                    <input type="color" id="form-etq-color" value="#6B7280">
+                    <span class="color-hex" id="form-etq-color-hex">#6B7280</span>
+                </div>
+            </div>
+            <div class="modal-acciones">
+                <button type="button" class="btn-cancelar" onclick="cerrarModalEtiquetaForm()">Cancelar</button>
+                <button type="submit" class="btn-guardar">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL ASIGNAR ETIQUETAS A TRANSACCION -->
+<div class="modal-overlay" id="modal-tag-tx" style="display:none;" onclick="cerrarModalTagTx(event)">
+    <div class="modal modal-small" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2 class="modal-titulo" id="tag-tx-titulo">Etiquetas</h2>
+            <button class="tx-viewer-cerrar" onclick="cerrarModalTagTx()">✕</button>
+        </div>
+        <div class="etiquetas-grid" id="etiquetas-grid"></div>
+        <div class="modal-acciones">
+            <button type="button" class="btn-cancelar" onclick="cerrarModalTagTx()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL TRANSACCIONES POR CATEGORIA -->
+<div class="modal-overlay" id="modal-cat-tx" style="display:none;" onclick="cerrarModalCatTx(event)">
+    <div class="modal modal-tx" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2 id="cat-tx-titulo">Transacciones</h2>
+            <button class="tx-viewer-cerrar" onclick="cerrarModalCatTx()">✕</button>
+        </div>
+        <div class="cat-tx-filtros">
+            <div class="cat-tx-filtro-row">
+                <label>Desde: <input type="date" id="cat-tx-desde" onchange="cargarCatTx()"></label>
+                <label>Hasta: <input type="date" id="cat-tx-hasta" onchange="cargarCatTx()"></label>
+            </div>
+            <div class="cat-tx-filtro-row">
+                <label>Metodo:
+                    <select id="cat-tx-metodo" multiple onchange="cargarCatTx()">
+                        <option value="efectivo">Efectivo</option>
+                        <option value="tarjeta_credito">Tarjeta Credito</option>
+                        <option value="transferencia">Transferencia</option>
+                    </select>
+                </label>
+                <label>Orden:
+                    <select id="cat-tx-orden" onchange="cargarCatTx()">
+                        <option value="fecha">Fecha</option>
+                        <option value="valor">Valor</option>
+                    </select>
+                </label>
+                <label>Dir:
+                    <select id="cat-tx-dir" onchange="cargarCatTx()">
+                        <option value="true">Desc</option>
+                        <option value="false">Asc</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+        <div class="cat-tx-total" id="cat-tx-total"></div>
+        <div class="cat-tx-lista" id="cat-tx-lista">
+            <div class="detalle-loading">Cargando...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+let categoriasData = [];
+let catTxData = [];
+let etiquetasData = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+    cargarCategorias();
+    cargarEtiquetas();
+});
+
+function cargarCategorias() {
+    const grid = document.getElementById('cat-grid');
+    grid.innerHTML = '<div class="cat-loading">Cargando categorias...</div>';
+    fetch('/api/categorias')
+        .then(r => r.json())
+        .then(data => {
+            categoriasData = data;
+            if (data.length === 0) {
+                grid.innerHTML = '<div class="cat-loading">No hay categorias</div>';
+                return;
+            }
+            grid.innerHTML = data.map(c => {
+                const icono = getIconoCat(c.categoria);
+                const color = getColorCat(c.categoria);
+                return `<div class="cat-card" onclick="abrirCatTx('${c.categoria}')" style="border-left: 4px solid ${color}">
+                    <div class="cat-card-icono" style="background:${color}">${icono}</div>
+                    <div class="cat-card-info">
+                        <span class="cat-card-nombre">${c.categoria}</span>
+                        <span class="cat-card-stats">${c.total_tx} tx &middot; $${Number(c.total_gastado).toLocaleString('es-CO')}</span>
+                    </div>
+                    <button class="cat-card-edit" onclick="event.stopPropagation();abrirEditarCategoria('${c.categoria}')" title="Editar categoria">⚙️</button>
+                </div>`;
+            }).join('');
+        })
+        .catch(() => grid.innerHTML = '<div class="cat-loading">Error cargando</div>');
+}
+
+function getIconoCat(cat) {
+    const cats = {{ categorias|tojson }};
+    const found = cats.find(c => c.id === cat);
+    return found ? found.icono : '📌';
+}
+
+function getColorCat(cat) {
+    const cats = {{ categorias|tojson }};
+    const found = cats.find(c => c.id === cat);
+    return found ? found.color : '#C9CBCF';
+}
+
+function abrirModalCategoria() {
+    document.getElementById('modal-cat-titulo').textContent = 'Nueva Categoria';
+    document.getElementById('form-cat-nombre-original').value = '';
+    document.getElementById('form-cat-nombre').value = '';
+    document.getElementById('form-cat-icono').value = '📌';
+    document.getElementById('form-cat-color').value = '#FF6384';
+    document.getElementById('form-cat-color-hex').textContent = '#FF6384';
+    document.getElementById('modal-categoria').style.display = 'flex';
+}
+
+function abrirEditarCategoria(nombre) {
+    document.getElementById('modal-cat-titulo').textContent = 'Editar Categoria';
+    document.getElementById('form-cat-nombre-original').value = nombre;
+    document.getElementById('form-cat-nombre').value = nombre;
+    const icono = getIconoCat(nombre);
+    const color = getColorCat(nombre);
+    document.getElementById('form-cat-icono').value = icono;
+    document.getElementById('form-cat-color').value = color;
+    document.getElementById('form-cat-color-hex').textContent = color;
+    document.getElementById('modal-categoria').style.display = 'flex';
+}
+
+function cerrarModalCategoria(e) {
+    if (e && e.target && e.target !== e.currentTarget) return;
+    document.getElementById('modal-categoria').style.display = 'none';
+}
+
+function guardarCategoria(e) {
+    e.preventDefault();
+    const nombreActual = document.getElementById('form-cat-nombre-original').value;
+    const nombreNuevo = document.getElementById('form-cat-nombre').value.trim();
+    const icono = document.getElementById('form-cat-icono').value.trim();
+    const color = document.getElementById('form-cat-color').value;
+
+    if (!nombreNuevo) { alert('Nombre requerido'); return; }
+
+    const saveConfig = () => {
+        const nombreFinal = document.getElementById('form-cat-nombre').value.trim();
+        return fetch('/api/categorias/config', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({nombre: nombreFinal, icono, color})
+        });
+    };
+
+    if (nombreActual) {
+        let chain = saveConfig();
+        if (nombreActual !== nombreNuevo) {
+            chain = chain.then(() => fetch('/api/categorias/rename', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({viejo: nombreActual, nuevo: nombreNuevo})
+            }));
+        }
+        chain.then(() => { cargarCategorias(); cerrarModalCategoria(); });
+    } else {
+        alert('Usa "Añadir Transacción" desde Inicio para crear una transaccion en la nueva categoria');
+        cerrarModalCategoria();
+    }
+}
+
+// Color picker sync
+document.addEventListener('DOMContentLoaded', () => {
+    const cp = document.getElementById('form-cat-color');
+    if (cp) cp.addEventListener('input', () => {
+        document.getElementById('form-cat-color-hex').textContent = cp.value;
+    });
+});
+
+// ─── TRANSACCIONES POR CATEGORIA ──────────────────────────
+
+function abrirCatTx(categoria) {
+    document.getElementById('cat-tx-titulo').textContent = categoria;
+    document.getElementById('cat-tx-desde').value = '';
+    document.getElementById('cat-tx-hasta').value = '';
+    document.getElementById('cat-tx-orden').value = 'fecha';
+    document.getElementById('cat-tx-dir').value = 'true';
+    document.getElementById('modal-cat-tx').style.display = 'flex';
+    cargarCatTx();
+}
+
+function cerrarModalCatTx(e) {
+    if (e && e.target && e.target !== e.currentTarget) return;
+    document.getElementById('modal-cat-tx').style.display = 'none';
+}
+
+function cargarCatTx() {
+    const categoria = document.getElementById('cat-tx-titulo').textContent;
+    let params = `categoria=${encodeURIComponent(categoria)}`;
+    const desde = document.getElementById('cat-tx-desde').value;
+    const hasta = document.getElementById('cat-tx-hasta').value;
+    if (desde) params += `&desde=${desde}`;
+    if (hasta) params += `&hasta=${hasta}`;
+    const select = document.getElementById('cat-tx-metodo');
+    const selected = Array.from(select.selectedOptions).map(o => o.value);
+    if (selected.length > 0) params += `&metodo_pago=${selected.join(',')}`;
+    params += `&orden=${document.getElementById('cat-tx-orden').value}`;
+    params += `&desc=${document.getElementById('cat-tx-dir').value}`;
+
+    fetch(`/api/categorias/transacciones?${params}`)
+        .then(r => r.json())
+        .then(data => {
+            catTxData = data.transacciones;
+            document.getElementById('cat-tx-total').innerHTML = `<strong>Total: ${data.total_fmt}</strong> &middot; ${data.num_transacciones} transacciones`;
+            const container = document.getElementById('cat-tx-lista');
+            if (data.transacciones.length === 0) {
+                container.innerHTML = '<div class="detalle-loading">Sin transacciones</div>';
+                return;
+            }
+            container.innerHTML = data.transacciones.map(t => {
+                const fecha = t.fecha_date ? new Date(t.fecha_date + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : t.fecha;
+                const metodoLabel = {efectivo: '💵', tarjeta_credito: '💳', transferencia: '🏦'}[t.metodo_pago] || '';
+                const notas = t.notas ? `<div class="tx-nota">📝 ${t.notas}</div>` : '';
+                const descCorta = (t.descripcion || '—').substring(0, 30);
+                const tags = (t.tags || []).map(tag => `<span class="tag-badge" style="background:${tag.color}20;color:${tag.color};border-color:${tag.color}">${tag.nombre}</span>`).join(' ');
+                return `<div class="detalle-tx">
+                    <span class="tx-icono">${metodoLabel}</span>
+                    <div class="tx-body">
+                        <span class="tx-desc">${t.descripcion || '—'}</span>
+                        <span class="tx-fecha">${fecha}</span>
+                        ${notas}
+                        ${tags ? `<div class="tx-tags">${tags}</div>` : ''}
+                    </div>
+                    <span class="tx-valor ${t.valor < 0 ? 'negativo' : 'positivo'}">${t.valor_fmt}</span>
+                    <button class="btn-icon btn-tag" onclick="event.stopPropagation();abrirAsignarEtiquetas(${t.id}, '${descCorta.replace(/'/g, "\\'")}')" title="Etiquetas">🏷️</button>
+                </div>`;
+            }).join('');
+        })
+        .catch(() => document.getElementById('cat-tx-lista').innerHTML = '<div class="detalle-loading">Error</div>');
+}
+
+// ─── ETIQUETAS ─────────────────────────────────────────────
+
+let tagTxId = null;
+
+function cargarEtiquetas() {
+    fetch('/api/etiquetas')
+        .then(r => r.json())
+        .then(data => { etiquetasData = data; });
+}
+
+// Tag manager
+function abrirModalEtiquetas() {
+    document.getElementById('modal-etiquetas').style.display = 'flex';
+    renderEtiquetas();
+}
+
+function cerrarModalEtiquetas(e) {
+    if (e && e.target && e.target !== e.currentTarget) return;
+    document.getElementById('modal-etiquetas').style.display = 'none';
+}
+
+function renderEtiquetas() {
+    const container = document.getElementById('etiquetas-lista');
+    if (etiquetasData.length === 0) {
+        container.innerHTML = '<div class="detalle-loading">Sin etiquetas. Crea una nueva.</div>';
+        return;
+    }
+    container.innerHTML = etiquetasData.map(e => `
+        <div class="etiqueta-item">
+            <span class="tag-badge" style="background:${e.color}20;color:${e.color};border-color:${e.color}">${e.nombre}</span>
+            <div class="etiqueta-acciones">
+                <button class="btn-icon" onclick="abrirEditarEtiqueta(${e.id}, '${e.nombre}', '${e.color}')" title="Editar">✏️</button>
+                <button class="btn-icon" onclick="eliminarEtiqueta(${e.id})" title="Eliminar">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function abrirNuevaEtiqueta() {
+    document.getElementById('modal-etq-titulo').textContent = 'Nueva Etiqueta';
+    document.getElementById('form-etq-id').value = '';
+    document.getElementById('form-etq-nombre').value = '';
+    document.getElementById('form-etq-color').value = '#6B7280';
+    document.getElementById('form-etq-color-hex').textContent = '#6B7280';
+    document.getElementById('modal-etiqueta-form').style.display = 'flex';
+}
+
+function abrirEditarEtiqueta(id, nombre, color) {
+    document.getElementById('modal-etq-titulo').textContent = 'Editar Etiqueta';
+    document.getElementById('form-etq-id').value = id;
+    document.getElementById('form-etq-nombre').value = nombre;
+    document.getElementById('form-etq-color').value = color;
+    document.getElementById('form-etq-color-hex').textContent = color;
+    document.getElementById('modal-etiqueta-form').style.display = 'flex';
+}
+
+function cerrarModalEtiquetaForm(e) {
+    if (e && e.target && e.target !== e.currentTarget) return;
+    document.getElementById('modal-etiqueta-form').style.display = 'none';
+}
+
+function guardarEtiqueta(e) {
+    e.preventDefault();
+    const id = document.getElementById('form-etq-id').value;
+    const nombre = document.getElementById('form-etq-nombre').value.trim();
+    const color = document.getElementById('form-etq-color').value;
+    if (!nombre) { alert('Nombre requerido'); return; }
+
+    if (id) {
+        fetch('/api/etiquetas/' + id, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({nombre, color})
+        }).then(r => r.json()).then(() => {
+            cargarEtiquetas();
+            cerrarModalEtiquetaForm();
+            renderEtiquetas();
+        });
+    } else {
+        fetch('/api/etiquetas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({nombre, color})
+        }).then(r => r.json()).then(() => {
+            cargarEtiquetas();
+            cerrarModalEtiquetaForm();
+            renderEtiquetas();
+        });
+    }
+}
+
+function eliminarEtiqueta(id) {
+    if (!confirm('Eliminar esta etiqueta?')) return;
+    fetch('/api/etiquetas/' + id, {method: 'DELETE'})
+        .then(r => r.json()).then(() => {
+            cargarEtiquetas();
+            renderEtiquetas();
+        });
+}
+
+// Color sync for etiqueta form
+document.addEventListener('DOMContentLoaded', () => {
+    const cp = document.getElementById('form-etq-color');
+    if (cp) cp.addEventListener('input', () => {
+        document.getElementById('form-etq-color-hex').textContent = cp.value;
+    });
+});
+
+// Tag assignment
+function abrirAsignarEtiquetas(txId, txDesc) {
+    tagTxId = txId;
+    document.getElementById('tag-tx-titulo').textContent = 'Etiquetas — ' + txDesc;
+    document.getElementById('modal-tag-tx').style.display = 'flex';
+    renderTagAsignacion();
+}
+
+function cerrarModalTagTx(e) {
+    if (e && e.target && e.target !== e.currentTarget) return;
+    document.getElementById('modal-tag-tx').style.display = 'none';
+    tagTxId = null;
+}
+
+function renderTagAsignacion() {
+    const container = document.getElementById('etiquetas-grid');
+    if (!tagTxId) return;
+    fetch('/api/transacciones/' + tagTxId + '/etiquetas')
+        .then(r => r.json())
+        .then(txTags => {
+            const txTagIds = txTags.map(t => t.id);
+            container.innerHTML = etiquetasData.map(e => {
+                const asignada = txTagIds.includes(e.id);
+                return `<button class="etiqueta-asignar ${asignada ? 'asignada' : ''}"
+                    onclick="toggleEtiquetaTx(${tagTxId}, ${e.id}, ${asignada})"
+                    style="background:${asignada ? e.color+'40' : 'var(--bg)'};border-color:${e.color}">
+                    <span class="tag-badge" style="background:${e.color}20;color:${e.color};border-color:${e.color}">${e.nombre}</span>
+                    <span class="etq-check">${asignada ? '✓' : '+'}</span>
+                </button>`;
+            }).join('');
+        });
+}
+
+function toggleEtiquetaTx(txId, etqId, asignada) {
+    if (asignada) {
+        fetch('/api/transacciones/' + txId + '/etiquetas/' + etqId, {method: 'DELETE'})
+            .then(r => r.json()).then(() => renderTagAsignacion());
+    } else {
+        fetch('/api/transacciones/' + txId + '/etiquetas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({etiqueta_id: etqId})
+        }).then(r => r.json()).then(() => renderTagAsignacion());
+    }
+}
+
+// Multi-select helper
+document.addEventListener('DOMContentLoaded', () => {
+    const multi = document.getElementById('cat-tx-metodo');
+    if (multi) {
+        multi.addEventListener('mousedown', function(e) {
+            if (e.target.tagName === 'OPTION') {
+                e.preventDefault();
+                e.target.selected = !e.target.selected;
+                cargarCatTx();
+            }
+        });
+    }
+});
+
+// Keyboard
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        ['modal-categoria', 'modal-cat-tx', 'modal-etiquetas', 'modal-etiqueta-form', 'modal-tag-tx'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.style.display !== 'none') el.style.display = 'none';
+        });
+    }
+});
+</script>
+
+<style>
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.page-title { font-size: 22px; font-weight: 700; }
+.btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-primary:hover { background: var(--primary-light); }
+
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.cat-card { display: flex; align-items: center; gap: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.15s; }
+.cat-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(45,106,79,0.08); }
+.cat-card-icono { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+.cat-card-info { flex: 1; min-width: 0; }
+.cat-card-nombre { display: block; font-weight: 600; font-size: 14px; }
+.cat-card-stats { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.cat-card-edit { background: none; border: none; font-size: 18px; cursor: pointer; padding: 4px; border-radius: 6px; }
+.cat-card-edit:hover { background: var(--bg); }
+.cat-loading { text-align: center; padding: 40px; color: var(--text-secondary); grid-column: 1 / -1; }
+
+.color-picker-row { display: flex; align-items: center; gap: 10px; }
+.color-picker-row input[type="color"] { width: 48px; height: 40px; border: 1px solid var(--border); border-radius: 6px; padding: 2px; cursor: pointer; }
+.color-hex { font-size: 13px; color: var(--text-secondary); font-family: monospace; }
+
+.modal-tx { max-width: 600px; max-height: 85vh; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.cat-tx-filtros { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.cat-tx-filtro-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.cat-tx-filtro-row label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+.cat-tx-filtro-row select { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.cat-tx-filtro-row input[type="date"] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.cat-tx-filtro-row select[multiple] { height: 60px; }
+.cat-tx-total { padding: 8px 16px; font-size: 14px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.cat-tx-lista { padding: 8px 16px 16px; overflow-y: auto; flex: 1; }
+
+.tag-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid; margin: 1px; font-weight: 500; }
+.tx-tags { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 2px; }
+
+.page-header-actions { display: flex; gap: 8px; align-items: center; }
+.btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.btn-secondary:hover { background: var(--bg); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-icon { background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1; }
+.btn-icon:hover { background: var(--bg); }
+.btn-tag { opacity: 0.5; }
+.detalle-tx:hover .btn-tag { opacity: 1; }
+.modal-small { max-width: 360px; }
+
+.etiquetas-toolbar { padding: 0 0 10px; }
+.etiquetas-lista { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+.etiqueta-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.etiqueta-acciones { display: flex; gap: 4px; }
+
+.etiquetas-grid { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; padding: 8px 0; }
+.etiqueta-asignar { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; font-size: 14px; transition: all 0.15s; }
+.etiqueta-asignar:hover { border-color: var(--accent); }
+.etiqueta-asignar.asignada { border-color: var(--primary); }
+.etq-check { font-weight: 700; font-size: 16px; color: var(--primary); }
+
+@media (max-width: 768px) {
+    .cat-grid { grid-template-columns: 1fr; }
+    .modal-tx { max-width: 100%; margin: 8px; max-height: 90vh; }
+}
+</style>
+{% endblock %}

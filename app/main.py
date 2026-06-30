@@ -6,7 +6,14 @@ from .database import (
     calcular_balance, obtener_rango_fechas, navegar_periodo, es_periodo_actual,
     obtener_transacciones_por_periodo, obtener_gastos_por_categoria,
     agregar_transaccion, obtener_ultima_fecha, obtener_extractos,
-    buscar_extracto_duplicado, obtener_extracto_detalle
+    buscar_extracto_duplicado, obtener_extracto_detalle,
+    compute_cuota_adjustments,
+    obtener_etiquetas, crear_etiqueta, actualizar_etiqueta, eliminar_etiqueta,
+    obtener_etiquetas_transaccion, asignar_etiqueta, quitar_etiqueta,
+    obtener_categorias_lista, obtener_transacciones_por_categoria,
+    obtener_perfil_crediticia,
+    actualizar_nota, actualizar_categoria_tx,
+    renombrar_categoria, obtener_config_categorias, guardar_config_categoria,
 )
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -16,26 +23,28 @@ app = Flask(__name__)
 PAGINAS = [
     {"id": "inicio", "nombre": "Inicio", "ruta": "/"},
     {"id": "extractos", "nombre": "Extractos", "ruta": "/extractos"},
+    {"id": "categorias", "nombre": "Categorias", "ruta": "/categorias"},
+    {"id": "creditos", "nombre": "Creditos", "ruta": "/creditos"},
     {"id": "presupuesto", "nombre": "Presupuesto", "ruta": "/presupuesto"},
     {"id": "reportes", "nombre": "Reportes", "ruta": "/reportes"},
 ]
 
 CATEGORIAS = [
-    {"id": "Comida", "icono": "🍽️", "color": "#FF6384"},
-    {"id": "Transporte", "icono": "🚗", "color": "#36A2EB"},
-    {"id": "Servicios", "icono": "💡", "color": "#FFCE56"},
-    {"id": "Ropa", "icono": "👕", "color": "#4BC0C0"},
-    {"id": "Entretenimiento", "icono": "🎬", "color": "#9966FF"},
-    {"id": "Salud", "icono": "🏥", "color": "#FF9F40"},
-    {"id": "Educacion", "icono": "📚", "color": "#7BC8A4"},
-    {"id": "Tecnologia", "icono": "💻", "color": "#E7E9EB"},
-    {"id": "Viajes", "icono": "✈️", "color": "#F7464A"},
-    {"id": "Ingreso familiar", "icono": "👨‍👩‍👧", "color": "#46BFBD"},
-    {"id": "Salario", "icono": "💰", "color": "#FDB45C"},
-    {"id": "Sin clasificar", "icono": "❓", "color": "#C9CBCF"},
-    {"id": "Compras general", "icono": "🛒", "color": "#A8E6CF"},
-    {"id": "Cargos financieros", "icono": "🏦", "color": "#D4A5A5"},
-    {"id": "Varios", "icono": "📦", "color": "#B0B0B0"},
+    {"id": "Comida", "icono": "\U0001f37d\ufe0f", "color": "#FF6384"},
+    {"id": "Transporte", "icono": "\U0001f697", "color": "#36A2EB"},
+    {"id": "Servicios", "icono": "\U0001f4a1", "color": "#FFCE56"},
+    {"id": "Ropa", "icono": "\U0001f455", "color": "#4BC0C0"},
+    {"id": "Entretenimiento", "icono": "\U0001f3ac", "color": "#9966FF"},
+    {"id": "Salud", "icono": "\U0001f3e5", "color": "#FF9F40"},
+    {"id": "Educacion", "icono": "\U0001f4da", "color": "#7BC8A4"},
+    {"id": "Tecnologia", "icono": "\U0001f4bb", "color": "#E7E9EB"},
+    {"id": "Viajes", "icono": "\u2708\ufe0f", "color": "#F7464A"},
+    {"id": "Ingreso familiar", "icono": "\U0001f468\u200d\U0001f469\u200d\U0001f467", "color": "#46BFBD"},
+    {"id": "Salario", "icono": "\U0001f4b0", "color": "#FDB45C"},
+    {"id": "Sin clasificar", "icono": "\u2753", "color": "#C9CBCF"},
+    {"id": "Compras general", "icono": "\U0001f6d2", "color": "#A8E6CF"},
+    {"id": "Cargos financieros", "icono": "\U0001f3e6", "color": "#D4A5A5"},
+    {"id": "Varios", "icono": "\U0001f4e6", "color": "#B0B0B0"},
 ]
 
 
@@ -45,7 +54,6 @@ def formatear_pesos(valor):
     return f"-${s}" if negativo else f"${s}"
 
 def formatear_pesos_linea(valor):
-    """Formatea sin decimales para lineas de detalle."""
     negativo = valor < 0
     s = f"{abs(valor):,.0f}".replace(",", ".")
     return f"-${s}" if negativo else f"${s}"
@@ -54,7 +62,13 @@ def icono_categoria(cat):
     for c in CATEGORIAS:
         if c["id"] == cat:
             return c["icono"]
-    return "📌"
+    return "\U0001f4cc"
+
+def color_categoria(cat):
+    for c in CATEGORIAS:
+        if c["id"] == cat:
+            return c["color"]
+    return "#C9CBCF"
 
 @app.context_processor
 def inject_globals():
@@ -75,11 +89,20 @@ def inject_globals():
 def index():
     return render_template("index.html")
 
-
 @app.route("/extractos")
 def extractos():
     return render_template("extractos.html")
 
+@app.route("/categorias")
+def categorias_page():
+    return render_template("categorias.html")
+
+@app.route("/creditos")
+def creditos_page():
+    return render_template("creditos.html")
+
+
+# ─── API: RESUMEN ──────────────────────────────────────────
 
 @app.route("/api/resumen")
 def api_resumen():
@@ -120,7 +143,6 @@ def api_navegar():
 
 
 def deduplicar_cuotas(transacciones):
-    """Agrupa cuotas (misma entidad+descripcion+abs(valor)) en una transaccion."""
     grupos = {}
     for t in transacciones:
         key = (t["entidad"], t["descripcion"].strip().lower(), round(abs(t["valor"]), 2))
@@ -135,31 +157,42 @@ def deduplicar_cuotas(transacciones):
             result.append(group[0])
     return result
 
+
 def api_resumen_params(tipo, periodo, desde, hasta):
     categorias = obtener_gastos_por_categoria(tipo, desde, hasta)
     transacciones = obtener_transacciones_por_periodo(tipo, desde, hasta)
     total = sum(c["total"] for c in categorias)
     es_actual = es_periodo_actual(periodo, desde, hasta)
 
-    # Deduplicar cuotas en la vista de transacciones (no en totales por categoria)
-    transacciones = deduplicar_cuotas(transacciones)
+    adjustments = compute_cuota_adjustments()
+    for t in transacciones:
+        if t["id"] in adjustments:
+            t["valor_original"] = t["valor"]
+            t["valor"] = adjustments[t["id"]]
+            t["es_cuota"] = True
+        else:
+            t["es_cuota"] = False
+
+    transacciones_dedup = deduplicar_cuotas(transacciones)
 
     return jsonify({
-        "total": round(total, 2),
+        "total": round(total),
         "total_fmt": formatear_pesos(total),
         "desde": desde.isoformat(),
         "hasta": hasta.isoformat(),
         "categorias": [{
             **c,
+            "total": round(c["total"]),
             "porcentaje": round(c["total"] / total * 100, 1) if total > 0 else 0,
             "icono": icono_categoria(c["categoria"]),
-            "color": next((x["color"] for x in CATEGORIAS if x["id"] == c["categoria"]), "#C9CBCF")
+            "color": color_categoria(c["categoria"])
         } for c in categorias],
         "transacciones": [
-            {**t, "valor_fmt": formatear_pesos(t["valor"])}
-            for t in transacciones
+            {**t, "valor_fmt": formatear_pesos(t["valor"]),
+             "valor_original_fmt": formatear_pesos(t["valor_original"]) if t.get("valor_original") else None}
+            for t in transacciones_dedup
         ],
-        "num_transacciones": len(transacciones),
+        "num_transacciones": len(transacciones_dedup),
         "es_actual": es_actual,
     })
 
@@ -181,11 +214,12 @@ def api_agregar_transaccion():
     categoria = data.get("categoria", "Varios").strip()
     tipo = data.get("tipo", "gasto")
     notas = data.get("notas", "").strip()
+    metodo_pago = data.get("metodo_pago", "transferencia")
 
     if not descripcion or valor <= 0:
         return jsonify({"error": "Descripcion y valor requeridos"}), 400
 
-    new_id = agregar_transaccion(fecha, descripcion, valor, categoria, tipo, notas)
+    new_id = agregar_transaccion(fecha, descripcion, valor, categoria, tipo, notas, metodo_pago=metodo_pago)
     balance, ing, gas = calcular_balance()
     return jsonify({
         "ok": True, "id": new_id,
@@ -194,6 +228,8 @@ def api_agregar_transaccion():
         "gastos_fmt": formatear_pesos(gas),
     })
 
+
+# ─── API: EXTRACTOS ────────────────────────────────────────
 
 @app.route("/api/extractos")
 def api_extractos():
@@ -267,16 +303,15 @@ def api_extracto_detalle(extracto_id):
 @app.route("/api/upload-pdf", methods=["POST"])
 def api_upload_pdf():
     if "pdf" not in request.files:
-        return jsonify({"error": "No se envió ningún archivo"}), 400
+        return jsonify({"error": "No se envi\u00f3 ning\u00fan archivo"}), 400
 
     file = request.files["pdf"]
     if file.filename == "":
-        return jsonify({"error": "Nombre de archivo vacío"}), 400
+        return jsonify({"error": "Nombre de archivo vac\u00edo"}), 400
 
     if not file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Solo se aceptan archivos PDF"}), 400
 
-    # Verificar duplicado
     if buscar_extracto_duplicado(file.filename):
         return jsonify({"error": "Este extracto ya existe en la base de datos", "duplicado": True}), 409
 
@@ -293,7 +328,6 @@ def api_upload_pdf():
     file.save(ruta_pdf)
     real_name = os.path.basename(ruta_pdf)
 
-    # Ejecutar procesamiento
     try:
         result = subprocess.run(
             [sys.executable, os.path.join(BASE, "pipeline", "procesar_inbox.py"), "--inbox-only"],
@@ -305,7 +339,6 @@ def api_upload_pdf():
         output = str(e)
         success = False
 
-    # Obtener info del extracto procesado
     info = {"archivo_original": file.filename, "archivo_real": real_name, "success": success}
     if success:
         extractos = obtener_extractos()
@@ -316,3 +349,160 @@ def api_upload_pdf():
             info["tipo"] = "tarjeta_credito" if ultimo["fuente"] in ("nu", "rappicard") else "cuenta_corriente"
 
     return jsonify(info)
+
+
+# ─── API: ETIQUETAS ─────────────────────────────────────────
+
+@app.route("/api/etiquetas")
+def api_etiquetas():
+    return jsonify(obtener_etiquetas())
+
+@app.route("/api/etiquetas", methods=["POST"])
+def api_crear_etiqueta():
+    data = request.get_json()
+    nombre = data.get("nombre", "").strip()
+    color = data.get("color", "#6B7280")
+    if not nombre:
+        return jsonify({"error": "Nombre requerido"}), 400
+    new_id, err = crear_etiqueta(nombre, color)
+    if err:
+        return jsonify({"error": err}), 409
+    return jsonify({"ok": True, "id": new_id})
+
+@app.route("/api/etiquetas/<int:eid>", methods=["PUT"])
+def api_actualizar_etiqueta(eid):
+    data = request.get_json()
+    nombre = data.get("nombre", "").strip()
+    color = data.get("color", "#6B7280")
+    if not nombre:
+        return jsonify({"error": "Nombre requerido"}), 400
+    if actualizar_etiqueta(eid, nombre, color):
+        return jsonify({"ok": True})
+    return jsonify({"error": "No encontrada"}), 404
+
+@app.route("/api/etiquetas/<int:eid>", methods=["DELETE"])
+def api_eliminar_etiqueta(eid):
+    if eliminar_etiqueta(eid):
+        return jsonify({"ok": True})
+    return jsonify({"error": "No encontrada"}), 404
+
+@app.route("/api/transacciones/<int:tid>/etiquetas", methods=["GET"])
+def api_obtener_etiquetas_tx(tid):
+    from .database import get_db
+    conn = get_db()
+    tags = obtener_etiquetas_transaccion(conn, tid)
+    conn.close()
+    return jsonify(tags)
+
+@app.route("/api/transacciones/<int:tid>/etiquetas", methods=["POST"])
+def api_asignar_etiqueta(tid):
+    data = request.get_json()
+    eid = data.get("etiqueta_id")
+    if not eid:
+        return jsonify({"error": "etiqueta_id requerido"}), 400
+    if asignar_etiqueta(tid, eid):
+        return jsonify({"ok": True})
+    return jsonify({"error": "Ya asignada"}), 409
+
+@app.route("/api/transacciones/<int:tid>/etiquetas/<int:eid>", methods=["DELETE"])
+def api_quitar_etiqueta(tid, eid):
+    if quitar_etiqueta(tid, eid):
+        return jsonify({"ok": True})
+    return jsonify({"error": "No encontrada"}), 404
+
+@app.route("/api/transacciones/<int:tid>/notas", methods=["PUT"])
+def api_actualizar_nota(tid):
+    data = request.get_json()
+    notas = data.get("notas", "")
+    if actualizar_nota(tid, notas):
+        return jsonify({"ok": True})
+    return jsonify({"error": "No encontrada"}), 404
+
+@app.route("/api/transacciones/<int:tid>/categoria", methods=["PUT"])
+def api_actualizar_categoria_tx(tid):
+    data = request.get_json()
+    categoria = data.get("categoria", "").strip()
+    if not categoria:
+        return jsonify({"error": "Categoria requerida"}), 400
+    if actualizar_categoria_tx(tid, categoria):
+        return jsonify({"ok": True})
+    return jsonify({"error": "No encontrada"}), 404
+
+
+# ─── API: CATEGORIAS ────────────────────────────────────────
+
+@app.route("/api/categorias")
+def api_categorias():
+    return jsonify(obtener_categorias_lista())
+
+@app.route("/api/categorias/transacciones")
+def api_categorias_transacciones():
+    categoria = request.args.get("categoria", "")
+    desde_str = request.args.get("desde")
+    hasta_str = request.args.get("hasta")
+    metodo_pago = request.args.get("metodo_pago")
+    orden = request.args.get("orden", "fecha")
+    desc = request.args.get("desc", "true") == "true"
+
+    desde = hasta = None
+    if desde_str:
+        desde = date.fromisoformat(desde_str)
+    if hasta_str:
+        hasta = date.fromisoformat(hasta_str)
+
+    txs = obtener_transacciones_por_categoria(categoria, desde, hasta, metodo_pago, orden, desc)
+    total = round(sum(abs(t["valor"]) for t in txs))
+    return jsonify({
+        "transacciones": [{**t, "valor_fmt": formatear_pesos(t["valor"])} for t in txs],
+        "total": total,
+        "total_fmt": formatear_pesos(total),
+        "num_transacciones": len(txs),
+    })
+
+
+@app.route("/api/categorias/rename", methods=["POST"])
+def api_renombrar_categoria():
+    data = request.get_json()
+    viejo = data.get("viejo", "").strip()
+    nuevo = data.get("nuevo", "").strip()
+    if not viejo or not nuevo:
+        return jsonify({"error": "Se requieren nombre viejo y nuevo"}), 400
+    cambios = renombrar_categoria(viejo, nuevo)
+    return jsonify({"ok": True, "cambios": cambios})
+
+
+@app.route("/api/categorias/config", methods=["GET"])
+def api_obtener_config_categorias():
+    return jsonify(obtener_config_categorias())
+
+
+@app.route("/api/categorias/config", methods=["PUT"])
+def api_guardar_config_categoria():
+    data = request.get_json()
+    nombre = data.get("nombre", "").strip()
+    icono = data.get("icono", "")
+    color = data.get("color", "#C9CBCF")
+    if not nombre:
+        return jsonify({"error": "Nombre requerido"}), 400
+    guardar_config_categoria(nombre, icono, color)
+    return jsonify({"ok": True})
+
+
+# ─── API: PERFIL CREDITICIO ────────────────────────────────
+
+@app.route("/api/perfil-crediticio")
+def api_perfil_crediticio():
+    data = obtener_perfil_crediticia()
+    for t in data["tarjetas"]:
+        t["deuda_total"] = round(t["deuda_total"])
+        t["deuda_total_fmt"] = formatear_pesos(t["deuda_total"])
+        t["pago_minimo_total"] = round(t["pago_minimo_total"])
+        t["pago_minimo_total_fmt"] = formatear_pesos(t["pago_minimo_total"])
+        t["cupo_total"] = round(t["cupo_total"])
+        t["cupo_total_fmt"] = formatear_pesos(t["cupo_total"])
+        t["utilizacion"] = round(t["deuda_total"] / t["cupo_total"] * 100, 1) if t["cupo_total"] > 0 else 0
+    for e in data["extractos"]:
+        for k in ("total_pagar", "pago_minimo", "cupo_total", "saldo_anterior", "saldo_actual", "total_cargos", "total_abonos"):
+            if e.get(k) is not None:
+                e[k] = round(e[k])
+    return jsonify(data)

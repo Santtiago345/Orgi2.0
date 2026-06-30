@@ -419,6 +419,51 @@ body {
 
 .tx-viewer-vacia { text-align: center; padding: 24px; color: var(--text-secondary); }
 
+.tx-viewer-metodo {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 6px 0;
+}
+.metodo-chk {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-secondary);
+}
+.metodo-chk:hover { background: var(--bg); }
+.metodo-chk input { accent-color: var(--primary); }
+.tx-metodo-icon { font-size: 14px; flex-shrink: 0; }
+.tx-cuota-info { font-size: 11px; color: var(--accent); font-weight: 400; }
+.tx-tags { width: 100%; display: flex; flex-wrap: wrap; gap: 2px; }
+.tag-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid; margin: 1px; font-weight: 500; }
+.tx-nota { width: 100%; font-size: 12px; color: var(--text-secondary); padding: 2px 0 0 70px; }
+
+/* Metodo pago selector en modal */
+.modal-metodo-selector {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.metodo-btn {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+    color: var(--text);
+}
+.metodo-btn:hover { border-color: var(--accent); background: #f0fdf4; }
+.metodo-btn.selected { border-color: var(--primary); background: var(--primary); color: white; }
+
 /* ─── BOTON + ─── */
 .btn-agregar {
     position: fixed;

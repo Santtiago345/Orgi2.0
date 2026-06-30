@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page" id="page-creditos">
+    <h2 class="page-title">Perfil Crediticio</h2>
+
+    <div id="creditos-content">
+        <div class="creditos-loading">Cargando perfil crediticio...</div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', cargarPerfil);
+
+function cargarPerfil() {
+    fetch('/api/perfil-crediticio')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('creditos-content');
+            if (!data.tarjetas || data.tarjetas.length === 0) {
+                container.innerHTML = '<div class="creditos-loading">Sin informacion de tarjetas de credito</div>';
+                return;
+            }
+
+            let html = '';
+
+            // Resumen de tarjetas
+            const nombres = {nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda'};
+            const iconos = {nu: '💚', rappicard: '💛'};
+            data.tarjetas.forEach(t => {
+                html += `<div class="tc-card">
+                    <div class="tc-card-header">
+                        <span class="tc-card-icono">${iconos[t.fuente] || '💳'}</span>
+                        <div class="tc-card-info">
+                            <span class="tc-card-nombre">${nombres[t.fuente] || t.fuente}</span>
+                            <span class="tc-card-sub">${t.num_extractos} extractos · Ultimo: ${t.ultimo_periodo}</span>
+                        </div>
+                    </div>
+                    <div class="tc-card-grid">
+                        <div class="tc-card-item">
+                            <span class="tc-card-label">Deuda Total</span>
+                            <span class="tc-card-valor highlight">${t.deuda_total_fmt}</span>
+                        </div>
+                        <div class="tc-card-item">
+                            <span class="tc-card-label">Pago Minimo</span>
+                            <span class="tc-card-valor">${t.pago_minimo_total_fmt}</span>
+                        </div>
+                        <div class="tc-card-item">
+                            <span class="tc-card-label">Cupo Total</span>
+                            <span class="tc-card-valor">${t.cupo_total_fmt}</span>
+                        </div>
+                        <div class="tc-card-item">
+                            <span class="tc-card-label">Utilizacion</span>
+                            <span class="tc-card-valor ${t.utilizacion > 70 ? 'danger' : t.utilizacion > 40 ? 'warning' : 'safe'}">${t.utilizacion}%</span>
+                        </div>
+                        <div class="tc-card-item">
+                            <span class="tc-card-label">Total Cargos</span>
+                            <span class="tc-card-valor">${t.total_cargos != null ? formatPesos(t.total_cargos) : '—'}</span>
+                        </div>
+                        <div class="tc-card-item">
+                            <span class="tc-card-label">Total Abonos</span>
+                            <span class="tc-card-valor">${t.total_abonos != null ? formatPesos(t.total_abonos) : '—'}</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            // Tabla historica de extractos
+            html += `<h3 class="creditos-subtitle">Historial de Extractos</h3>
+                <div class="tc-table-wrap">
+                <table class="tc-table">
+                    <thead><tr>
+                        <th>Periodo</th><th>Total Pagar</th><th>Pago Minimo</th>
+                        <th>Cupo</th><th>Saldo Ant.</th><th>Cargos</th><th>Abonos</th>
+                    </tr></thead><tbody>`;
+
+            data.extractos.forEach(e => {
+                const nombresBanco = {nu: '💚 Nu', rappicard: '💛 RappiCard'};
+                html += `<tr>
+                    <td>${nombresBanco[e.fuente] || e.fuente} ${e.periodo}</td>
+                    <td class="td-highlight">${formatPesos(e.total_pagar)}</td>
+                    <td>${formatPesos(e.pago_minimo)}</td>
+                    <td>${formatPesos(e.cupo_total)}</td>
+                    <td>${formatPesos(e.saldo_anterior)}</td>
+                    <td>${formatPesos(e.total_cargos)}</td>
+                    <td>${formatPesos(e.total_abonos)}</td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+
+            container.innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('creditos-content').innerHTML = '<div class="creditos-loading">Error cargando perfil crediticio</div>';
+        });
+}
+
+function formatPesos(val) {
+    if (val == null) return '—';
+    const s = Math.abs(val).toLocaleString('es-CO', {minimumFractionDigits: 0});
+    return val < 0 ? `-$${s}` : `$${s}`;
+}
+</script>
+
+<style>
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
+.creditos-loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+.creditos-subtitle { font-size: 18px; font-weight: 600; margin: 24px 0 12px; }
+
+.tc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.tc-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.tc-card-icono { font-size: 36px; }
+.tc-card-nombre { display: block; font-weight: 700; font-size: 18px; }
+.tc-card-sub { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+.tc-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tc-card-item { padding: 12px; background: var(--bg); border-radius: 8px; text-align: center; }
+.tc-card-label { display: block; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.tc-card-valor { display: block; font-size: 18px; font-weight: 700; }
+.tc-card-valor.highlight { color: var(--primary); }
+.tc-card-valor.safe { color: #16a34a; }
+.tc-card-valor.warning { color: #d97706; }
+.tc-card-valor.danger { color: #dc2626; }
+
+.tc-table-wrap { overflow-x: auto; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); }
+.tc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tc-table th { padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap; }
+.tc-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tc-table tr:last-child td { border-bottom: none; }
+.tc-table tr:hover td { background: var(--bg); }
+.td-highlight { font-weight: 700; color: var(--primary); }
+
+@media (max-width: 768px) {
+    .tc-card-grid { grid-template-columns: repeat(2, 1fr); }
+    .tc-table { font-size: 11px; }
+    .tc-table th, .tc-table td { padding: 6px 8px; }
+}
+</style>
+{% endblock %}

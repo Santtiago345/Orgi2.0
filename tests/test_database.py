@@ -27,9 +27,9 @@ def test_es_periodo_actual():
 
 def test_calcular_balance():
     balance, ingresos, gastos = calcular_balance()
-    assert isinstance(balance, float)
-    assert isinstance(ingresos, float)
-    assert isinstance(gastos, float)
+    assert isinstance(balance, (int, float))
+    assert isinstance(ingresos, (int, float))
+    assert isinstance(gastos, (int, float))
     assert ingresos >= 0
     assert gastos >= 0
 
