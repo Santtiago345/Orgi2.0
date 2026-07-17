@@ -213,14 +213,17 @@ def api_agregar_transaccion():
 
     fecha = data.get("fecha", date.today().isoformat())
     descripcion = data.get("descripcion", "").strip()
-    valor = float(data.get("valor", 0))
+    try:
+        valor = float(data.get("valor", 0))
+    except Exception:
+        return jsonify({"error": "Valor inválido"}), 400
     categoria = data.get("categoria", "Varios").strip()
     tipo = data.get("tipo", "gasto")
     notas = data.get("notas", "").strip()
     metodo_pago = data.get("metodo_pago", "transferencia")
 
-    if not descripcion or valor <= 0:
-        return jsonify({"error": "Descripcion y valor requeridos"}), 400
+    if not descripcion or valor == 0:
+        return jsonify({"error": "Descripcion y valor diferentes de 0 requeridos"}), 400
 
     new_id = agregar_transaccion(fecha, descripcion, valor, categoria, tipo, notas, metodo_pago=metodo_pago)
     balance, ing, gas = calcular_balance()

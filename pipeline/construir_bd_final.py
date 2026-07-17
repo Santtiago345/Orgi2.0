@@ -11,6 +11,7 @@ import sqlite3, os, re, json, csv
 from datetime import datetime, timedelta
 from collections import defaultdict
 from difflib import SequenceMatcher
+from utils.normalize import normalize_valor
 
 BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
 OLD_DB = os.path.join(BASE, "data", "myfinance", "MyFinance.db")
@@ -657,6 +658,8 @@ def construir_db(all_old, pdf_txs, resultados):
             matched_uids.add(tx["uid"])
             cat_final = clasificar_old(tx)
             
+            monto_norm = normalize_valor(tx.get("amount"), tipo=tx.get("type"))
+            pdf_monto_norm = normalize_valor(pt.get("valor"), tipo=pt.get("tipo"))
             c.execute("""
                 INSERT INTO transacciones
                 (uid, fuente, fecha, monto, tipo, descripcion, categoria_old, categoria_final, metodo_pago,
@@ -664,9 +667,9 @@ def construir_db(all_old, pdf_txs, resultados):
                 VALUES (?, 'app_antigua', ?, ?, ?, ?, ?, ?, 'Tarjeta/Nequi',
                         ?, ?, ?, ?, ?, ?)
             """, (
-                tx["uid"], tx["date"], tx["amount"], tx["type"], tx["comment"],
+                tx["uid"], tx["date"], monto_norm, tx["type"], tx["comment"],
                 tx["category"], cat_final,
-                pt["id"], pt["entidad"], pt["descripcion"][:80], abs(pt["valor"]),
+                pt["id"], pt["entidad"], pt["descripcion"][:80], pdf_monto_norm,
                 pt["fecha_date"] or pt["fecha"], diff
             ))
     
@@ -696,11 +699,12 @@ def construir_db(all_old, pdf_txs, resultados):
         if cat_final == "Gasto/Varios":
             notas = "REVISAR: clasificar manualmente"
         
+        monto_norm = normalize_valor(tx.get("amount"), tipo=tx.get("type"))
         c.execute("""
             INSERT INTO no_cruzadas
             (uid, fecha, monto, tipo, descripcion, categoria_old, categoria_final, metodo_pago, notas)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (tx["uid"], tx["date"], tx["amount"], tx["type"], tx["comment"],
+        """, (tx["uid"], tx["date"], monto_norm, tx["type"], tx["comment"],
               tx["category"], cat_final, metodo, notas))
     
     conn.commit()

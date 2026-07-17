@@ -527,12 +527,17 @@ def update_num_transacciones(conn, eid, n):
     conn.execute("UPDATE extractos SET num_transacciones=? WHERE id=?", (n, eid))
     conn.commit()
 
+from utils.normalize import normalize_valor
+
+
 def insert_transaccion(conn, extracto_id, fecha, descripcion, valor, categoria, entidad, es_ingreso, metodo_pago, notas=""):
+    """Inserta transacción normalizando signo: ingresos positivos, gastos negativos."""
     c = conn.cursor()
+    v = normalize_valor(valor, es_ingreso=es_ingreso)
     c.execute("""
         INSERT INTO transacciones (extracto_id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago, notas)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (extracto_id, fecha, fecha, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago, notas))
+    """, (extracto_id, fecha, fecha, descripcion, v, entidad, categoria, es_ingreso, metodo_pago, notas))
     conn.commit()
     return c.lastrowid
 

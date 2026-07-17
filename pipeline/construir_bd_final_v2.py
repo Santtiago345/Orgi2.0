@@ -11,6 +11,7 @@ CONSTRUIR BD DEFINITIVA v2
 import sqlite3, os, re, json, csv
 from datetime import datetime, timedelta
 from collections import defaultdict
+from utils.normalize import normalize_valor
 
 BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
 OLD_DB = os.path.join(BASE, "data", "myfinance", "MyFinance.db")
@@ -465,14 +466,16 @@ def construir_db(all_old, pdf_txs):
         
         if match_result:
             pt, diff, score = match_result
+            monto_norm = normalize_valor(tx.get("amount"), tipo=tx.get("type"))
+            pdf_monto_norm = normalize_valor(pt.get("valor"), tipo=pt.get("tipo"))
             c.execute("""
                 INSERT INTO transacciones
                 (uid, fecha, fecha_norm, monto, tipo, descripcion, categoria_old, categoria_final, metodo_pago,
                  pdf_match_id, pdf_match_entidad, pdf_match_desc, pdf_match_monto, pdf_match_fecha, match_score)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (tx["uid"], tx["date"], tx["date"], tx["amount"], tx["type"],
+            """, (tx["uid"], tx["date"], tx["date"], monto_norm, tx["type"],
                   tx["comment"], tx["category"], cat_final, metodo,
-                  pt["id"], pt["entidad"], pt["descripcion"][:80], abs(pt["valor"]),
+                  pt["id"], pt["entidad"], pt["descripcion"][:80], pdf_monto_norm,
                   pt.get("fecha_norm") or pt.get("fecha"), diff))
             matched_ids.add(tx["uid"])
             cruzadas += 1
@@ -484,11 +487,12 @@ def construir_db(all_old, pdf_txs):
             elif cat_final == "Gasto/Varios":
                 notas = "REVISAR: posible match no encontrado"
             
+            monto_norm = normalize_valor(tx.get("amount"), tipo=tx.get("type"))
             c.execute("""
                 INSERT INTO no_cruzadas
                 (uid, fecha, fecha_norm, monto, tipo, descripcion, categoria_old, categoria_final, metodo_pago, notas)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (tx["uid"], tx["date"], tx["date"], tx["amount"], tx["type"],
+            """, (tx["uid"], tx["date"], tx["date"], monto_norm, tx["type"],
                   tx["comment"], tx["category"], cat_final, metodo, notas))
     
     conn.commit()

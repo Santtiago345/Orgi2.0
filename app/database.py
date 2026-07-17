@@ -112,10 +112,22 @@ def agregar_transaccion(fecha, descripcion, valor, categoria, tipo, notas="", en
     es_ingreso = 1 if tipo == "ingreso" else 0
     conn = get_db()
     c = conn.cursor()
+    # Normalizar signo: almacenar ingresos como valores positivos y gastos como negativos
+    try:
+        v = float(valor)
+    except Exception:
+        v = valor
+    if es_ingreso:
+        if isinstance(v, (int, float)) and v < 0:
+            v = abs(v)
+    else:
+        if isinstance(v, (int, float)) and v > 0:
+            v = -abs(v)
+
     c.execute("""
         INSERT INTO transacciones (fecha, fecha_date, descripcion, valor, categoria, entidad, es_ingreso, notas, metodo_pago)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (fecha, fecha, descripcion, valor, categoria, entidad, es_ingreso, notas, metodo_pago))
+    """, (fecha, fecha, descripcion, v, categoria, entidad, es_ingreso, notas, metodo_pago))
     conn.commit()
     new_id = c.lastrowid
     conn.close()

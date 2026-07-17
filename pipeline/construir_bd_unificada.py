@@ -23,6 +23,7 @@ Archivos generados:
 import sqlite3, os, re, json, csv
 from datetime import datetime, timedelta
 from collections import defaultdict
+from utils.normalize import normalize_valor
 
 BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
 OLD_DB = os.path.join(BASE, "data", "myfinance", "MyFinance.db")
@@ -460,14 +461,15 @@ def construir_bd(pdf_txs, app_txs, cruces, prestamo_map):
     
     # PRIMERO: Insertar PDFs con campos TC y prestamo
     for pt in pdf_txs:
+        monto_norm = normalize_valor(pt.get("monto") or pt.get("valor"), tipo=pt.get("tipo"))
         c.execute("""
             INSERT INTO transacciones (fecha, monto, descripcion, tipo, categoria, metodo_pago,
                 fuente, pdf_original_id, app_uid, entidad,
                 es_tarjeta_credito, num_cuotas, cuotas_pagadas, estado_pago, prestamo_id, notas)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            pt["fecha"][:10], pt["monto"], pt["descripcion"][:200],
-            pt["tipo"], pt.get("categoria_pdf", ""),
+            pt["fecha"][:10], monto_norm, pt["descripcion"][:200],
+            pt.get("tipo"), pt.get("categoria_pdf", ""),
             f"Tarjeta/{pt['fuente']}",
             pt["fuente"], pt["pdf_id"], pt["entidad"],
             pt.get("es_tarjeta_credito", 0), pt.get("num_cuotas", 1),
@@ -479,14 +481,15 @@ def construir_bd(pdf_txs, app_txs, cruces, prestamo_map):
     # SEGUNDO: Agregar efectivo (MyFinance sin match)
     for tx in app_txs:
         if tx["uid"] in app_uids_match: continue
-        cat_final, metodo = clasificar_efectivo(tx["comment"], tx["category"], tx["amount"], tx["type"])
+        cat_final, metodo = clasificar_efectivo(tx["comment"], tx["category"], tx.get("amount"), tx["type"])
+        monto_norm = normalize_valor(tx.get("amount"), tipo=tx.get("type"))
         c.execute("""
             INSERT INTO transacciones (fecha, monto, descripcion, tipo, categoria, metodo_pago,
                 fuente, pdf_original_id, app_uid, entidad,
                 es_tarjeta_credito, num_cuotas, cuotas_pagadas, estado_pago, prestamo_id, notas)
             VALUES (?, ?, ?, ?, ?, ?, 'Efectivo', NULL, ?, NULL,
                 0, 1, 1, 'pagada', NULL, 'Pago en efectivo')
-        """, (tx["date"][:10], tx["amount"], tx["comment"][:200], tx["type"],
+        """, (tx["date"][:10], monto_norm, tx["comment"][:200], tx["type"],
               cat_final, metodo, tx["uid"]))
     
     # TERCERO: Tabla de cruce
