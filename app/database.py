@@ -769,7 +769,7 @@ def obtener_sin_cruzar(entidad=None, categoria=None, limite=50, offset=0):
     c = conn.cursor()
     params = []
     sql = """
-        SELECT id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago
+        SELECT id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago, notas
         FROM transacciones
         WHERE cruzada = 0
     """
@@ -780,7 +780,7 @@ def obtener_sin_cruzar(entidad=None, categoria=None, limite=50, offset=0):
         sql += " AND categoria = ?"
         params.append(categoria)
 
-    count_sql = sql.replace("SELECT id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago", "SELECT COUNT(*)")
+    count_sql = sql.replace("SELECT id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago, notas", "SELECT COUNT(*)")
     c.execute(count_sql, params)
     total = c.fetchone()[0]
 
@@ -788,13 +788,15 @@ def obtener_sin_cruzar(entidad=None, categoria=None, limite=50, offset=0):
     params.extend([limite, offset])
     c.execute(sql, params)
     rows = [dict(r) for r in c.fetchall()]
+    for r in rows:
+        r['valor_fmt'] = f"${abs(r['valor']):,.0f}".replace(",", ".")
     conn.close()
     return {"transacciones": rows, "total": total}
 
 def obtener_sugerencias_cruce(tx_id):
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT id, entidad, valor, fecha_date, es_ingreso, descripcion, categoria FROM transacciones WHERE id=?", (tx_id,))
+    c.execute("SELECT id, entidad, valor, fecha_date, es_ingreso, descripcion, categoria, notas FROM transacciones WHERE id=?", (tx_id,))
     src = c.fetchone()
     if not src:
         conn.close()
@@ -808,7 +810,7 @@ def obtener_sugerencias_cruce(tx_id):
 
     placeholders = ','.join('?' for _ in target)
     c.execute(f"""
-        SELECT id, entidad, valor, fecha_date, es_ingreso, descripcion, categoria
+        SELECT id, entidad, valor, fecha_date, es_ingreso, descripcion, categoria, notas
         FROM transacciones
         WHERE entidad IN ({placeholders}) AND cruzada = 0 AND es_ingreso = ?
     """, (*target, src['es_ingreso']))
@@ -845,6 +847,7 @@ def obtener_sugerencias_cruce(tx_id):
             'fecha_date': cand['fecha_date'],
             'descripcion': cand['descripcion'],
             'categoria': cand['categoria'],
+            'notas': cand.get('notas', ''),
             'score': score,
             'diff_valor': round(diff_valor),
             'diff_dias': diff_dias,

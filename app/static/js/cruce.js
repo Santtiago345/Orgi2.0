@@ -88,6 +88,7 @@ function cargarSinCruzar() {
                     <div class="cruce-item-info">
                         <span class="cruce-item-desc">${t.descripcion || '—'}</span>
                         <span class="cruce-item-meta">${t.fecha_date || t.fecha} <span class="badge-entidad ${entidadCls}">${t.entidad}</span> <span class="cruce-item-cat">${t.categoria || 'Sin categoría'}</span></span>
+                        ${t.notas ? `<div class="cruce-item-notas">📝 ${t.notas}</div>` : ''}
                     </div>
                     <span class="cruce-item-valor">${t.valor_fmt}</span>
                     <button class="btn-cruzar sm" onclick="buscarMatch(${t.id})">🔍 Match</button>
@@ -137,7 +138,7 @@ function buscarMatch(txId) {
                 return `<div class="sug-item">
                     <div class="sug-item-info">
                         <span class="sug-item-desc">${s.descripcion || '—'}</span>
-                        <span class="sug-item-meta">${s.fecha_date} · ${s.entidad} · ${s.categoria || 'Sin categoría'}</span>
+                        <span class="sug-item-meta">${s.fecha_date} · ${s.entidad} · ${s.categoria || 'Sin categoría'}${s.notas ? '<br>📝 '+s.notas : ''}</span>
                     </div>
                     <span class="sug-item-valor">${s.valor_fmt}</span>
                     <span class="sug-item-score ${scoreCls}">${s.score}%</span>

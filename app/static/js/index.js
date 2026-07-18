@@ -288,7 +288,15 @@ function renderTxViewer() {
                     <div class="tx-detail-inner">
                         <div class="tx-detail-row"><span>Método</span><span>${metodoIcon} ${t.metodo_pago || '—'}</span></div>
                         <div class="tx-detail-row"><span>Entidad</span><span>${t.entidad || '—'}</span></div>
-                        ${t.notas ? `<div class="tx-detail-row"><span>Notas</span><span>📝 ${t.notas}</span></div>` : ''}
+                        <div class="tx-detail-row">
+                            <span>Notas</span>
+                            <span class="nota-view" id="nota-view-${t.id}">
+                                ${t.notas
+                                    ? `<span class="nota-text" onclick="editarNota(${t.id})">📝 ${t.notas}</span><button class="btn-icon nota-edit-btn" onclick="event.stopPropagation();editarNota(${t.id})" title="Editar nota">✏️</button>`
+                                    : `<span class="nota-text nota-vacia" onclick="editarNota(${t.id})">➕ Añadir nota</span><button class="btn-icon nota-edit-btn" onclick="event.stopPropagation();editarNota(${t.id})" title="Añadir nota">✏️</button>`
+                                }
+                            </span>
+                        </div>
                         ${t.es_cuota && t.cuota_info ? `
                         <div class="tx-detail-row"><span>Cuota</span><span>${t.cuota_info.cuota_actual} de ${t.cuota_info.total_cuotas}</span></div>
                         <div class="tx-detail-row"><span>Valor total</span><span>${t.valor_original_fmt ? '$' + Number(t.valor_original).toLocaleString('es-CO') : '—'}</span></div>
@@ -358,6 +366,75 @@ function toggleTagTx(txId, etqId, btn) {
     fetch(url, {method, headers: {'Content-Type': 'application/json'}, body})
         .then(r => r.json())
         .then(() => btn.classList.toggle('assigned'));
+}
+
+function editarNota(txId) {
+    event.stopPropagation();
+    const viewEl = document.getElementById('nota-view-' + txId);
+    if (!viewEl) return;
+    const textSpan = viewEl.querySelector('.nota-text');
+    const currentText = textSpan ? textSpan.textContent.replace(/^[📝➕]\s*/, '') : '';
+    viewEl.dataset.originalNota = currentText;
+    viewEl.innerHTML = `<textarea rows="2" class="nota-textarea">${currentText.replace(/</g, '&lt;')}</textarea>
+        <div class="nota-actions">
+            <button class="btn-cruzar sm" onclick="event.stopPropagation();guardarNota(${txId})">Guardar</button>
+            <button class="btn-cancelar" onclick="event.stopPropagation();cancelarNota(${txId})">Cancelar</button>
+        </div>`;
+    const ta = viewEl.querySelector('textarea');
+    if (ta) { ta.focus(); ta.select(); }
+}
+
+function guardarNota(txId) {
+    const viewEl = document.getElementById('nota-view-' + txId);
+    if (!viewEl) return;
+    const ta = viewEl.querySelector('textarea');
+    if (!ta) return;
+    const notas = ta.value.trim();
+    fetch('/api/transacciones/' + txId + '/notas', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({notas})
+    }).then(r => r.json()).then(data => {
+        if (data.ok) {
+            const escNotas = notas.replace(/</g, '&lt;');
+            if (notas) {
+                viewEl.innerHTML = `<span class="nota-text" onclick="editarNota(${txId})">📝 ${escNotas}</span><button class="btn-icon nota-edit-btn" onclick="event.stopPropagation();editarNota(${txId})" title="Editar nota">✏️</button>`;
+            } else {
+                viewEl.innerHTML = `<span class="nota-text nota-vacia" onclick="editarNota(${txId})">➕ Añadir nota</span><button class="btn-icon nota-edit-btn" onclick="event.stopPropagation();editarNota(${txId})" title="Añadir nota">✏️</button>`;
+            }
+            const txItem = viewEl.closest('.tx-item');
+            if (txItem) {
+                const notaDiv = txItem.querySelector('.tx-nota');
+                if (notaDiv) {
+                    if (notas) notaDiv.innerHTML = '📝 ' + escNotas;
+                    else notaDiv.remove();
+                } else if (notas) {
+                    const newNota = document.createElement('div');
+                    newNota.className = 'tx-nota';
+                    newNota.innerHTML = '📝 ' + escNotas;
+                    const valorSpan = txItem.querySelector('.tx-valor');
+                    if (valorSpan && valorSpan.nextSibling) {
+                        valorSpan.parentNode.insertBefore(newNota, valorSpan.nextSibling);
+                    } else {
+                        txItem.appendChild(newNota);
+                    }
+                }
+            }
+        }
+    });
+}
+
+function cancelarNota(txId) {
+    const viewEl = document.getElementById('nota-view-' + txId);
+    if (!viewEl) return;
+    const originalNota = viewEl.dataset.originalNota || '';
+    const escOriginal = originalNota.replace(/</g, '&lt;');
+    if (originalNota) {
+        viewEl.innerHTML = `<span class="nota-text" onclick="editarNota(${txId})">📝 ${escOriginal}</span><button class="btn-icon nota-edit-btn" onclick="event.stopPropagation();editarNota(${txId})" title="Editar nota">✏️</button>`;
+    } else {
+        viewEl.innerHTML = `<span class="nota-text nota-vacia" onclick="editarNota(${txId})">➕ Añadir nota</span><button class="btn-icon nota-edit-btn" onclick="event.stopPropagation();editarNota(${txId})" title="Añadir nota">✏️</button>`;
+    }
+    delete viewEl.dataset.originalNota;
 }
 
 function toggleOrdenDir() {
