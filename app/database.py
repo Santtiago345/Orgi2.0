@@ -804,7 +804,7 @@ def obtener_sugerencias_cruce(tx_id):
     src = dict(src)
 
     if src['entidad'] == 'myfinance':
-        target = ('nequi', 'nu', 'rappicard')
+        target = ('nequi', 'nu', 'rappicard', 'dale', 'daviplata')
     else:
         target = ('myfinance',)
 

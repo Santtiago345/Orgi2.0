@@ -228,7 +228,7 @@ function resolverMetodo(t) {
     const mp = (t.metodo_pago || '').toLowerCase();
     const cat = (t.categoria || '').toLowerCase();
     if (cat === 'sin cruzar') return 'sincruzar';
-    if (entidad === 'nequi') return 'nequi';
+    if (entidad === 'nequi' || entidad === 'dale' || entidad === 'daviplata') return 'nequi';
     if (entidad === 'nu' || entidad === 'rappicard' || mp === 'tarjeta_credito' || mp === 'tarjeta') return 'tarjeta';
     if (entidad === 'manual' || entidad === 'myfinance') return 'manual';
     return 'otros';

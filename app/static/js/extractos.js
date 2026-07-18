@@ -76,8 +76,8 @@ function cargarExtractos() {
             if (data.length === 0) { container.innerHTML = '<div class="extractos-loading">No hay extractos cargados</div>'; return; }
             const grupos = {};
             data.forEach(e => { const key = e.fuente || 'desconocido'; if (!grupos[key]) grupos[key] = []; grupos[key].push(e); });
-            const orden = ['nequi', 'nu', 'rappicard'];
-            const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda'};
+const orden = ['nequi', 'nu', 'rappicard', 'dale', 'daviplata'];
+const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda', dale: 'Dale', daviplata: 'Daviplata'};
             let html = '';
             orden.forEach(banco => {
                 if (!grupos[banco]) return;
@@ -107,7 +107,7 @@ function abrirDetalle(id) {
         .then(d => {
             const isTC = d.es_tarjeta_credito;
             const tipoIcon = isTC ? '💳' : '🏦';
-            const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard'};
+            const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata'};
             const nombreBanco = nombresBanco[d.fuente] || d.fuente;
             document.getElementById('detalle-titulo').textContent = `${tipoIcon} ${nombreBanco} — ${d.periodo}`;
 

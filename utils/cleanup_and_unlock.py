@@ -43,7 +43,7 @@ print(f"    {len(db_rows)} extractos cargados")
 # DB archivo = '{fuente}_{nombre_original}.pdf' -> en disco es '{nombre_original}.pdf'
 db_by_diskname = {}  # {nombre_en_disco: (id, fuente, archivo, periodo)}
 for r in db_rows:
-    disk_name = re.sub(r'^(nequi|nu|rappicard)_', '', r[2])
+    disk_name = re.sub(r'^(nequi|nu|rappicard|dale|daviplata)_', '', r[2])
     db_by_diskname[disk_name] = r
 
 
@@ -90,7 +90,7 @@ print("\n[1] Identificando PDFs en data/...")
 
 all_originals = []  # (ruta_completa, fuente, id_db, periodo, anio, mes)
 
-for fuente in ['nequi', 'nu', 'rappicard']:
+for fuente in ['nequi', 'nu', 'rappicard', 'dale', 'daviplata']:
     dir_path = os.path.join(BASE, 'data', fuente)
     if not os.path.isdir(dir_path):
         continue
@@ -127,7 +127,13 @@ print(f"\n[2] Desbloqueando {len(originals_with_id)} PDFs con clave '{PASSWORD}'
 TEMP = os.path.join(BASE, 'data', '__temp_unlocked__')
 os.makedirs(TEMP, exist_ok=True)
 
-tipo_por_fuente = {'nequi': 'extracto_cuenta', 'nu': 'tarjeta_credito', 'rappicard': 'tarjeta_credito'}
+tipo_por_fuente = {
+    'nequi': 'extracto_cuenta',
+    'nu': 'tarjeta_credito',
+    'rappicard': 'tarjeta_credito',
+    'dale': 'extracto_cuenta',
+    'daviplata': 'extracto_cuenta',
+}
 
 unlocked = []  # (fuente, id_db, dest_name, ruta_temp)
 errores = []
@@ -172,7 +178,7 @@ for fuente, id_db, dest_name, _ in unlocked:
     unlocked_by_fuente[fuente].add(id_db)
 
 cobertura_ok = True
-for fuente in ['nequi', 'nu', 'rappicard']:
+for fuente in ['nequi', 'nu', 'rappicard', 'dale', 'daviplata']:
     expected = set(r[0] for r in db_rows if r[1] == fuente)
     actual = unlocked_by_fuente.get(fuente, set())
     missing = expected - actual
@@ -231,7 +237,7 @@ if not verificacion_ok:
 
 # Segunda verificacion: contar archivos
 print("\n[5b] Verificando cantidad de archivos en data/...")
-for fuente in ['nequi', 'nu', 'rappicard']:
+for fuente in ['nequi', 'nu', 'rappicard', 'dale', 'daviplata']:
     dir_path = os.path.join(BASE, 'data', fuente)
     unlocked_in_dir = [r[2] for r in unlocked if r[0] == fuente]
     expected_n = len(unlocked_in_dir)
@@ -254,7 +260,7 @@ print("\n[6] LIMPIEZA: eliminando PDFs bloqueados y duplicados...")
 deleted = 0
 kept_unlocked = set(r[2] for r in unlocked)
 
-for fuente in ['nequi', 'nu', 'rappicard']:
+for fuente in ['nequi', 'nu', 'rappicard', 'dale', 'daviplata']:
     dir_path = os.path.join(BASE, 'data', fuente)
     if not os.path.isdir(dir_path):
         continue
@@ -277,7 +283,7 @@ print(f"\n    Eliminados: {deleted} archivos bloqueados/duplicados")
 print("\n" + "=" * 70)
 print("PROCESO COMPLETADO EXITOSAMENTE")
 print("=" * 70)
-for fuente in ['nequi', 'nu', 'rappicard']:
+for fuente in ['nequi', 'nu', 'rappicard', 'dale', 'daviplata']:
     files = sorted([r[2] for r in unlocked if r[0] == fuente])
     print(f"\n  [{fuente}] ({len(files)} archivos):")
     for f in files:

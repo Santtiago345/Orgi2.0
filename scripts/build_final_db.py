@@ -10,6 +10,8 @@ MYFINANCE_DB = os.path.join(DATA_DIR, "myfinance", "MyFinance.db")
 NEQUI_DB = os.path.join(DATA_DIR, "nequi", "nequi_finanzas.db")
 NU_DB = os.path.join(DATA_DIR, "nu", "nu_finanzas.db")
 RAPPI_DB = os.path.join(DATA_DIR, "rappicard", "rappicard_finanzas.db")
+DALE_DB = os.path.join(DATA_DIR, "dale", "dale_finanzas.db")
+DAVIPLATA_DB = os.path.join(DATA_DIR, "daviplata", "daviplata_finanzas.db")
 
 def create_schema(cursor):
     cursor.executescript("""
@@ -155,7 +157,7 @@ def load_bank_extractos(db_path, fuente, cursor_final, id_offset):
     cursor.execute("SELECT * FROM extractos")
     rows = cursor.fetchall()
     
-    tipo = "cuenta" if fuente.lower() == "nequi" else "tarjeta_credito"
+    tipo = "cuenta" if fuente.lower() in ("nequi", "dale", "daviplata") else "tarjeta_credito"
     
     for r in rows:
         d = dict(r)
@@ -225,11 +227,15 @@ def build_database():
     load_bank_extractos(NEQUI_DB, "Nequi", cursor_final, 0)
     load_bank_extractos(NU_DB, "Nu", cursor_final, 1000)
     load_bank_extractos(RAPPI_DB, "Rappicard", cursor_final, 2000)
+    load_bank_extractos(DALE_DB, "Dale", cursor_final, 3000)
+    load_bank_extractos(DAVIPLATA_DB, "Daviplata", cursor_final, 4000)
     
     bank_data = []
     bank_data.extend(load_bank_db(NEQUI_DB, "Nequi", 0))
     bank_data.extend(load_bank_db(NU_DB, "Nu", 1000))
     bank_data.extend(load_bank_db(RAPPI_DB, "Rappicard", 2000))
+    bank_data.extend(load_bank_db(DALE_DB, "Dale", 3000))
+    bank_data.extend(load_bank_db(DAVIPLATA_DB, "Daviplata", 4000))
     
     normal_bank_txs = []
     deferred_purchases = {}
