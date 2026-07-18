@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-07-17T16:46:36.894160",
+  "databases": {
+    "finanzas_completa.db": {
+      "issues": []
+    },
+    "finanzas_definitiva.db": {
+      "issues": [
+        {
+          "type": "tipo_expense_sign_incorrecto",
+          "count": 154
+        }
+      ]
+    },
+    "finanzas_unificadas.db": {
+      "issues": [
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 78,
+          "expected": 12,
+          "actual": 13
+        },
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 81,
+          "expected": 4,
+          "actual": 5
+        },
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 82,
+          "expected": 4,
+          "actual": 5
+        },
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 83,
+          "expected": 7,
+          "actual": 9
+        },
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 84,
+          "expected": 6,
+          "actual": 7
+        },
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 85,
+          "expected": 6,
+          "actual": 7
+        },
+        {
+          "type": "extracto_count_mismatch",
+          "extracto_id": 86,
+          "expected": 9,
+          "actual": 10
+        }
+      ]
+    },
+    "finanzas_unificada_completa.db": {
+      "issues": [
+        {
+          "type": "tipo_expense_sign_incorrecto",
+          "count": 3583
+        }
+      ]
+    }
+  }
+}
