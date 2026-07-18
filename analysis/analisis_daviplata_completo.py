@@ -27,14 +27,14 @@ def parse_colombian_currency(s):
         s = s.replace(",", ".")
     try: return float(s)
     except: return None
+INGRESO_KW = ["ABONO", "NOTA CREDITO", "ACEPTAR PLATA", "TRANS CTA"]
 
-INGRESO_KW = ["ABONO", "NOTA CREDITO", "ACEPTAR PLATA"]
 
 CLASIFICACION = [
-    (["ABONO", "NOTA CREDITO", "ACEPTAR PLATA"], "Ingreso recurrente"),
+    (["ABONO", "NOTA CREDITO", "ACEPTAR PLATA", "TRANS CTA"], "Ingreso recurrente"),
     (["RETIRO ATM"], "Retiro efectivo"),
     (["PSE COMPRAS", "PAGOS", "COMPRA"], "Compra PSE"),
-    (["TRANSFERENCIA", "TRANS CTA", "ENVIAR PLATA", "TRANSFIYA"], "Transferencia a personas"),
+    (["TRANSFERENCIA", "ENVIAR PLATA", "TRANSFIYA"], "Transferencia a personas"),
     (["DISPERSION"], "Compras general"),
 ]
 
@@ -91,51 +91,38 @@ def parse_daviplata_pdf(filepath):
     fm = re.search(r"Fecha del Saldo\s+(\d{2}/\d{2}/\d{4})", text)
     if fm: result["fecha_saldo"] = fm.group(1)
 
-    lines = text.split("\n")
-    for line in lines:
-        line = line.strip()
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})\s+(.+)", line)
-        if not m:
-            continue
-        fecha = m.group(1)
-        resto = m.group(2).strip()
+    with pdfplumber.open(filepath) as pdf:
+        for page in pdf.pages:
+            tables = page.extract_tables()
+            for table in tables:
+                for row in table:
+                    if not row or len(row) < 5:
+                        continue
+                    fecha = (row[0] or "").strip()
+                    if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha):
+                        continue
+                    valor_str = (row[1] or "").strip()
+                    descripcion = (row[4] or "").strip()
+                    if not valor_str or not descripcion:
+                        continue
 
-        vm = re.match(r"^([\d, ]+\.\d{2})\s+(.+)", resto)
-        if not vm:
-            continue
-        valor = parse_valor_con_espacios(vm.group(1))
-        if valor is None:
-            continue
-        resto2 = vm.group(2).strip()
+                    valor = parse_valor_con_espacios(valor_str)
+                    if valor is None:
+                        continue
 
-        nm = re.match(r"^(\d+)\s+(.+)", resto2)
-        autorizacion = ""
-        resto3 = resto2
-        if nm:
-            autorizacion = nm.group(1)
-            resto3 = nm.group(2).strip()
+                    es_ing = es_ingreso_daviplata(descripcion)
+                    valor_final = abs(valor) if es_ing else -abs(valor)
 
-        nm2 = re.match(r"^(\d{7,})\s+(.+)", resto3)
-        descripcion = resto3
-        if nm2:
-            descripcion = nm2.group(2).strip()
-
-        if not descripcion:
-            continue
-
-        es_ing = es_ingreso_daviplata(descripcion)
-        valor_final = abs(valor) if es_ing else -abs(valor)
-
-        result["transacciones"].append({
-            "fecha": fecha,
-            "fecha_date": fecha,
-            "descripcion": descripcion[:100],
-            "descripcion_normalizada": re.sub(r'[^A-Z0-9\s]', '', descripcion.upper()).strip(),
-            "valor": valor_final,
-            "categoria": clasificar_daviplata(descripcion),
-            "cuota_actual": 1,
-            "total_cuotas": 1,
-        })
+                    result["transacciones"].append({
+                        "fecha": fecha,
+                        "fecha_date": fecha,
+                        "descripcion": descripcion[:100],
+                        "descripcion_normalizada": re.sub(r'[^A-Z0-9\s]', '', descripcion.upper()).strip(),
+                        "valor": valor_final,
+                        "categoria": clasificar_daviplata(descripcion),
+                        "cuota_actual": 1,
+                        "total_cuotas": 1,
+                    })
 
     return result
 
