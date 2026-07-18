@@ -14,15 +14,23 @@ MESES_LARGO = {
     "julio":7,"agosto":8,"septiembre":9,"octubre":10,"noviembre":11,"diciembre":12
 }
 
-def parse_colombian_currency(s):
+def parse_dale_currency(s):
     if not s: return None
-    s = s.strip().replace("$", "").replace(" ", "")
+    s = s.strip().replace("$", "").replace("+", "").replace(" ", "")
     negativo = s.endswith("-")
     if negativo: s = s[:-1]
-    if "." in s and "," in s:
-        s = s.replace(".", "").replace(",", ".")
+    if "." in s:
+        parts = s.rsplit(".", 1)
+        if len(parts) == 2 and len(parts[1]) <= 2 and len(parts[1]) > 0:
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(".", "")
     elif "," in s:
-        s = s.replace(",", ".")
+        parts = s.rsplit(",", 1)
+        if len(parts) == 2 and len(parts[1]) == 2:
+            s = s.replace(",", ".")
+        else:
+            s = s.replace(",", "")
     try:
         v = float(s)
         return -v if negativo else v
@@ -82,13 +90,13 @@ def parse_dale_pdf(filepath):
             result["periodo"] = f"{anio}/{mes:02d}"
 
     sm = re.search(r"Saldo inicial\s*\$?\s*([\d.,\-]+)", text, re.IGNORECASE)
-    if sm: result["saldo_inicial"] = parse_colombian_currency(sm.group(1))
+    if sm: result["saldo_inicial"] = parse_dale_currency(sm.group(1))
     sf = re.search(r"Saldo final\s*\$?\s*([\d.,\-]+)", text, re.IGNORECASE)
-    if sf: result["saldo_final"] = parse_colombian_currency(sf.group(1))
+    if sf: result["saldo_final"] = parse_dale_currency(sf.group(1))
     ta = re.search(r"Total abonos?\s*\$?\s*([\d.,]+)", text, re.IGNORECASE)
-    if ta: result["total_abonos"] = parse_colombian_currency(ta.group(1))
+    if ta: result["total_abonos"] = parse_dale_currency(ta.group(1))
     td = re.search(r"Total d[eé]bitos?\s*\$?\s*([\d.,]+)", text, re.IGNORECASE)
-    if td: result["total_debitos"] = parse_colombian_currency(td.group(1))
+    if td: result["total_debitos"] = parse_dale_currency(td.group(1))
 
     lines = text.split("\n")
     for line in lines:
@@ -113,7 +121,7 @@ def parse_dale_pdf(filepath):
             p = parts[i]
             vm = re.match(r'^[\$\+]*([\d.,]+-?)\s*$', p)
             if vm:
-                val = parse_colombian_currency(vm.group(0))
+                val = parse_dale_currency(vm.group(0))
                 if val is not None:
                     if val < 0:
                         valor_debito = abs(val)
@@ -124,7 +132,7 @@ def parse_dale_pdf(filepath):
                     p2 = parts[i]
                     sm2 = re.match(r'^[\$\+]*([\d.,]+-?)\s*$', p2)
                     if sm2:
-                        val2 = parse_colombian_currency(p2)
+                        val2 = parse_dale_currency(p2)
                         if val2 is not None:
                             if val2 < 0:
                                 valor_debito = abs(val2)

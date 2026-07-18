@@ -50,7 +50,9 @@ def es_ingreso_daviplata(desc):
     return any(kw in d for kw in INGRESO_KW)
 
 def parse_valor_con_espacios(valor_str):
-    return parse_colombian_currency(valor_str.replace(" ", ""))
+    s = valor_str.replace(" ", "").replace(",", "")
+    try: return float(s)
+    except: return None
 
 def parse_daviplata_pdf(filepath):
     text = ""
