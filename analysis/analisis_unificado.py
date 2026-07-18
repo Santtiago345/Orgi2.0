@@ -163,7 +163,9 @@ def parse_nu(filepath):
     result = {"fuente": "nu", "tipo": "tarjeta_credito", "transacciones": [],
               "periodo": None, "anio": None, "mes": None, "titular": None,
               "total_pagar": None, "pago_minimo": None, "cupo_total": None,
-              "cupo_usado": None, "fecha_corte": None, "fecha_pago": None}
+              "cupo_usado": None, "saldo_anterior": None,
+              "interes_corriente": None, "tasa_mensual": None, "tasa_anual_ea": None,
+              "fecha_corte": None, "fecha_pago": None}
 
     with pdfplumber.open(filepath) as pdf:
         text = ""
@@ -174,11 +176,18 @@ def parse_nu(filepath):
     nm = re.search(r"Joel\s+Santiago\s+Neuta\s+Jaspe", text, re.IGNORECASE)
     if nm: result["titular"] = "JOEL SANTIAGO NEUTA JASPE"
 
-    for key, alias in [("Deuda a pagar este mes", "total_pagar"),
-                       ("PAGO MÍNIMO", "pago_minimo"),
+    for key, alias in [("PAGO MÍNIMO", "pago_minimo"),
                        ("Tu cupo definido", "cupo_total")]:
         m = re.search(rf"{re.escape(key)}\s*\$?([\d.,]+)", text)
         if m: result[alias] = m.group(1)
+    if result.get("pago_minimo"):
+        result["total_pagar"] = result["pago_minimo"]
+
+    im = re.search(r"Intereses.*?\$?\s*([\d.,]+)", text)
+    if im: result["interes_corriente"] = im.group(1)
+
+    pm = re.search(r"(\d+[,.]?\d*)%", text)
+    if pm: result["tasa_mensual"] = pm.group(1)
 
     per = re.search(r"(\d{1,2}\s+\w+)\s*[-–—]\s*(\d{1,2}\s+\w+\s+\d{4})\s*$", text, re.MULTILINE)
     if not per:
@@ -236,7 +245,9 @@ def parse_rappicard(filepath):
     result = {"fuente": "rappicard", "tipo": "tarjeta_credito", "transacciones": [],
               "periodo": None, "anio": None, "mes": None, "titular": None,
               "total_pagar": None, "pago_minimo": None, "cupo_total": None,
-              "cupo_usado": None, "fecha_corte": None, "fecha_pago": None}
+              "cupo_usado": None, "saldo_anterior": None,
+              "interes_corriente": None, "tasa_mensual": None, "tasa_anual_ea": None,
+              "fecha_corte": None, "fecha_pago": None}
 
     with pdfplumber.open(filepath) as pdf:
         text = ""
@@ -248,7 +259,6 @@ def parse_rappicard(filepath):
     if nm: result["titular"] = "JOEL SANTIAGO NEUTA JASPE"
 
     for pattern, alias in [("Pago total", "total_pagar"),
-                           ("Pago m.nimo", "pago_minimo"),
                            ("Cupo total", "cupo_total"),
                            ("Cupo utilizado", "cupo_usado")]:
         m = re.search(rf"{pattern}[:\s]*\$?\s*([\d.,]+)", text)
@@ -256,10 +266,36 @@ def parse_rappicard(filepath):
             m = re.search(rf"{pattern}\s*\n\s*\$?\s*([\d.,]+)", text)
         if m: result[alias] = m.group(1)
 
+    for line in text.split("\n"):
+        m = re.search(r"Pago m[ií]nimo\s+\$?\s*([\d.,]+)", line)
+        if m:
+            result["pago_minimo"] = m.group(1)
+            break
+    if not result.get("pago_minimo"):
+        m = re.search(r"Pago m.nimo\s*\n\s*\$?\s*([\d.,]+)", text)
+        if m: result["pago_minimo"] = m.group(1)
+
+    sa = re.search(r"Saldo periodo anterior\s*\$?\s*([\d.,]+)", text)
+    if sa: result["saldo_anterior"] = sa.group(1)
+
+    ic = re.search(r"Intereses corrientes?\s*\$?\s*([\d.,]+)", text)
+    if ic: result["interes_corriente"] = ic.group(1)
+
+    tms = re.findall(r"(\d+[,.]\d+)%\s+(\d+[,.]\d+)%", text)
+    for tm in tms:
+        v1 = parse_colombian_currency(tm[0])
+        v2 = parse_colombian_currency(tm[1])
+        if v1 and v2 and v1 > 0 and v2 > 0:
+            result["tasa_mensual"] = tm[0]
+            result["tasa_anual_ea"] = tm[1]
+            break
+
     per_start = re.search(r"Desde\s+(\d+\s+\w+\s+\d{4})", text)
     per_end = re.search(r"Hasta\s+(\d+\s+\w+\s+\d{4})", text)
     if per_start and per_end:
         result["periodo"] = f"{per_start.group(1)} a {per_end.group(1)}"
+    if per_start:
+        result["fecha_corte"] = per_start.group(1)
 
     fp = re.search(r"Fecha de pago.*?(?:^|\n)\s*(\d+\s+\w+\s+\d{4})", text, re.DOTALL)
     if not fp:
@@ -412,7 +448,8 @@ def crear_db(conn):
             periodo TEXT, anio INTEGER, mes INTEGER,
             titular TEXT, cuenta TEXT,
             total_pagar REAL, pago_minimo REAL, cupo_total REAL,
-            saldo_anterior REAL, total_abonos REAL, total_cargos REAL, saldo_actual REAL,
+            cupo_usado REAL, saldo_anterior REAL, total_abonos REAL, total_cargos REAL, saldo_actual REAL,
+            interes_corriente REAL, tasa_mensual REAL, tasa_anual_ea REAL,
             fecha_corte TEXT, fecha_pago TEXT,
             num_transacciones INTEGER
         );
@@ -448,20 +485,29 @@ def insertar_datos(conn, todos):
         cur.execute("""
             INSERT INTO extractos
             (archivo, fuente, tipo, periodo, anio, mes, titular, cuenta,
-             total_pagar, pago_minimo, cupo_total,
+             total_pagar, pago_minimo, cupo_total, cupo_usado,
              saldo_anterior, total_abonos, total_cargos, saldo_actual,
+             interes_corriente, tasa_mensual, tasa_anual_ea,
              fecha_corte, fecha_pago, num_transacciones)
-            VALUES (?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,?, ?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,
+                    ?,?,?,?,
+                    ?,?,?,?,
+                    ?,?,?,
+                    ?,?,?)
         """, (
             d["archivo"], d["fuente"], d["tipo"],
             d.get("periodo"), d.get("anio"), d.get("mes"), d.get("titular"), cu,
             parse_colombian_currency(d.get("total_pagar")),
             parse_colombian_currency(d.get("pago_minimo")),
             parse_colombian_currency(d.get("cupo_total")),
+            parse_colombian_currency(d.get("cupo_usado")),
             parse_colombian_currency(d.get("saldo_anterior")),
             parse_colombian_currency(d.get("total_abonos")),
             parse_colombian_currency(d.get("total_cargos")),
             parse_colombian_currency(d.get("saldo_actual")),
+            parse_colombian_currency(d.get("interes_corriente")),
+            parse_colombian_currency(d.get("tasa_mensual")),
+            parse_colombian_currency(d.get("tasa_anual_ea")),
             d.get("fecha_corte"), d.get("fecha_pago"),
             len(d["transacciones"]),
         ))
