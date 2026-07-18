@@ -18,6 +18,8 @@ from .database import (
     obtener_resumen_presupuesto,
     obtener_tendencia_mensual, obtener_comparativa_anual,
     obtener_top_gastos, obtener_resumen_anual,
+    obtener_sin_cruzar, obtener_sugerencias_cruce,
+    cruzar_transaccion, obtener_estadisticas_cruce,
 )
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +33,7 @@ PAGINAS = [
     {"id": "creditos", "nombre": "Creditos", "ruta": "/creditos"},
     {"id": "presupuesto", "nombre": "Presupuesto", "ruta": "/presupuesto"},
     {"id": "reportes", "nombre": "Reportes", "ruta": "/reportes"},
+    {"id": "cruce", "nombre": "Cruce", "ruta": "/cruce"},
 ]
 
 CATEGORIAS = [
@@ -112,6 +115,10 @@ def presupuesto_page():
 @app.route("/reportes")
 def reportes_page():
     return render_template("reportes.html")
+
+@app.route("/cruce")
+def cruce_page():
+    return render_template("cruce.html")
 
 
 # ─── API: RESUMEN ──────────────────────────────────────────
@@ -636,6 +643,50 @@ def api_resumen_anual():
         from datetime import date
         anio = date.today().year
     return jsonify(obtener_resumen_anual(anio))
+
+
+# ─── API: CRUCE ────────────────────────────────────────────
+
+@app.route("/api/cruce/sin-cruzar")
+def api_cruce_sin_cruzar():
+    entidad = request.args.get("entidad")
+    categoria = request.args.get("categoria")
+    try:
+        limite = int(request.args.get("limite", 50))
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        limite, offset = 50, 0
+    data = obtener_sin_cruzar(entidad, categoria, limite, offset)
+    for t in data["transacciones"]:
+        t["valor_fmt"] = formatear_pesos(t["valor"])
+    return jsonify(data)
+
+
+@app.route("/api/cruce/sugerencias/<int:tx_id>")
+def api_cruce_sugerencias(tx_id):
+    sugerencias = obtener_sugerencias_cruce(tx_id)
+    for s in sugerencias:
+        s["valor_fmt"] = formatear_pesos(s["valor"])
+    return jsonify(sugerencias)
+
+
+@app.route("/api/cruce/cruzar", methods=["POST"])
+def api_cruce_cruzar():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Datos requeridos"}), 400
+    tx_id_bancaria = data.get("tx_id_bancaria")
+    tx_id_myfinance = data.get("tx_id_myfinance")
+    if not tx_id_bancaria or not tx_id_myfinance:
+        return jsonify({"error": "tx_id_bancaria y tx_id_myfinance requeridos"}), 400
+    if cruzar_transaccion(tx_id_bancaria, tx_id_myfinance):
+        return jsonify({"ok": True})
+    return jsonify({"error": "Error al cruzar transacciones"}), 500
+
+
+@app.route("/api/cruce/estadisticas")
+def api_cruce_estadisticas():
+    return jsonify(obtener_estadisticas_cruce())
 
 
 # ─── API: PERFIL CREDITICIO ────────────────────────────

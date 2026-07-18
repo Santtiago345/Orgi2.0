@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page" id="page-cruce">
+    <h2 class="page-title">Cruce de Transacciones</h2>
+
+    <div id="cruce-estadisticas" class="cruce-stats"></div>
+
+    <div class="cruce-filtros">
+        <select id="filtro-entidad" class="cruce-select" onchange="cargarSinCruzar()">
+            <option value="todas">Todas las entidades</option>
+            <option value="myfinance">MyFinance</option>
+            <option value="nequi">Nequi</option>
+            <option value="nu">Nu</option>
+            <option value="rappicard">RappiCard</option>
+        </select>
+        <select id="filtro-categoria" class="cruce-select" onchange="cargarSinCruzar()">
+            <option value="">Todas las categorías</option>
+        </select>
+    </div>
+
+    <div class="cruce-lista-header">
+        <span class="cruce-lista-total" id="cruce-total">0 transacciones sin cruzar</span>
+    </div>
+
+    <div id="cruce-lista" class="cruce-lista">
+        <div class="cruce-loading">Cargando...</div>
+    </div>
+
+    <div id="cruce-paginacion" class="cruce-paginacion"></div>
+</div>
+
+<div id="modal-sugerencias" class="modal-overlay" style="display:none;" onclick="cerrarModalSugerencias(event)">
+    <div class="modal modal-ancho">
+        <h3 class="modal-titulo">Sugerencias de Cruce</h3>
+        <div id="modal-sugerencia-tx" class="sug-tx-info"></div>
+        <div id="modal-sugerencia-lista" class="sug-lista">
+            <div class="cruce-loading">Buscando matches...</div>
+        </div>
+        <div class="sug-manual">
+            <h4 class="sug-manual-titulo">Cruzar manualmente</h4>
+            <div class="sug-manual-fields">
+                <select id="sug-manual-cat" class="cruce-select"></select>
+                <button class="btn-cruzar" onclick="cruzarManual()">Cruzar manualmente</button>
+            </div>
+        </div>
+        <div class="modal-acciones">
+            <button class="btn-cancelar" onclick="cerrarModalSugerencias(null)">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/cruce.js"></script>
+
+<style>
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+
+.cruce-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.cruce-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
+.cruce-stat-valor { display: block; font-size: 24px; font-weight: 700; color: var(--text); }
+.cruce-stat-label { display: block; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.cruce-stat-card.positivo .cruce-stat-valor { color: #16a34a; }
+.cruce-stat-card.negativo .cruce-stat-valor { color: #dc2626; }
+.cruce-stat-card.info .cruce-stat-valor { color: var(--primary); }
+
+.cruce-filtros { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.cruce-select { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--surface); color: var(--text); cursor: pointer; }
+
+.cruce-lista-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.cruce-lista-total { font-size: 13px; color: var(--text-secondary); }
+
+.cruce-lista { display: flex; flex-direction: column; gap: 4px; }
+.cruce-loading { text-align: center; padding: 32px; color: var(--text-secondary); }
+
+.cruce-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s; }
+.cruce-item:hover { background: var(--bg); }
+.cruce-item-check { accent-color: var(--primary); width: 16px; height: 16px; flex-shrink: 0; }
+.cruce-item-info { flex: 1; min-width: 0; }
+.cruce-item-desc { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cruce-item-meta { display: block; font-size: 11px; color: var(--text-secondary); }
+.cruce-item-valor { font-weight: 700; font-size: 14px; white-space: nowrap; }
+.cruce-item .badge-entidad { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-left: 4px; }
+.badge-myfinance { background: #e8f5e9; color: #2e7d32; }
+.badge-nequi { background: #e3f2fd; color: #1565c0; }
+.badge-nu { background: #fce4ec; color: #c62828; }
+.badge-rappicard { background: #fff3e0; color: #e65100; }
+.cruce-item-cat { font-size: 11px; color: var(--text-secondary); background: var(--bg); padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+
+.cruce-paginacion { display: flex; justify-content: center; gap: 6px; margin-top: 16px; }
+.page-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 13px; color: var(--text-secondary); transition: all 0.15s; }
+.page-btn:hover { background: var(--bg); color: var(--text); }
+.page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+.page-btn:disabled { opacity: 0.4; cursor: default; }
+
+.modal-ancho { max-width: 600px; }
+
+.sug-tx-info { background: var(--bg); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
+.sug-tx-info-row { display: flex; justify-content: space-between; padding: 2px 0; }
+.sug-tx-info-label { color: var(--text-secondary); }
+.sug-tx-info-valor { font-weight: 600; }
+
+.sug-lista { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; max-height: 320px; overflow-y: auto; }
+.sug-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.sug-item-info { flex: 1; min-width: 0; }
+.sug-item-desc { display: block; font-size: 13px; font-weight: 500; }
+.sug-item-meta { display: block; font-size: 11px; color: var(--text-secondary); }
+.sug-item-valor { font-weight: 700; font-size: 14px; white-space: nowrap; }
+.sug-item-score { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; margin-right: 8px; }
+.sug-item-score.bajo { color: var(--text-secondary); }
+.sug-item-score.medio { color: var(--warning); }
+
+.sug-manual { border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 12px; }
+.sug-manual-titulo { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.sug-manual-fields { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sug-manual-fields .cruce-select { flex: 1; min-width: 140px; }
+.btn-cruzar { padding: 8px 16px; border: none; border-radius: 8px; background: var(--primary); color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+.btn-cruzar:hover { background: var(--primary-light); }
+.btn-cruzar.sm { padding: 5px 12px; font-size: 12px; }
+
+.cruce-vacia { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+@media (max-width: 768px) {
+    .cruce-stats { grid-template-columns: repeat(3, 1fr); }
+    .cruce-filtros { flex-direction: column; }
+    .cruce-item { flex-wrap: wrap; }
+    .modal-ancho { max-width: 100%; }
+}
+</style>
+{% endblock %}

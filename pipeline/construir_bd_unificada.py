@@ -13,6 +13,12 @@ FLUJO:
   4. Se identifican prestamos Nequi con ID unico
   5. Se genera tabla de cruce con trazabilidad completa
 
+NOTA: Este script NO inserta extractos de TC (Nu/RappiCard). Solo lee transacciones
+desde finanzas_unificadas.db. Los extractos de TC con anio/mes=NULL se originan en
+reparse_tc.py (que resetea mes=NULL en clear_tc_data()) y se propagan via
+analisis_tarjetas_completo.py -> build_final_db.py.
+Si se requiere corregir, ejecutar: python scripts/migrate_fix_tc_periodos.py
+
 Archivos generados:
   - outputs/db/finanzas_unificada_completa.db
   - outputs/db/finanzas_unificada_completa.json

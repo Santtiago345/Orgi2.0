@@ -350,7 +350,7 @@ def obtener_perfil_crediticia():
     c.execute("""
         SELECT e.fuente,
                COUNT(*) as num_extractos,
-               MAX(e.anio*100+e.mes) as ultimo_periodo,
+               MAX(COALESCE(e.anio,0)*100+COALESCE(e.mes,0)) as ultimo_periodo,
                e_last.total_pagar as deuda_total,
                e_last.pago_minimo as pago_minimo_total,
                e_last.cupo_total,
@@ -363,7 +363,7 @@ def obtener_perfil_crediticia():
                e_last.mes as ultimo_mes
         FROM extractos e
         JOIN extractos e_last ON e_last.fuente = e.fuente
-            AND e_last.anio*100+e_last.mes = (SELECT MAX(ei.anio*100+ei.mes) FROM extractos ei WHERE ei.fuente = e.fuente)
+            AND COALESCE(e_last.anio,0)*100+COALESCE(e_last.mes,0) = (SELECT MAX(COALESCE(ei.anio,0)*100+COALESCE(ei.mes,0)) FROM extractos ei WHERE ei.fuente = e.fuente)
         WHERE e.fuente IN ('nu','rappicard')
         GROUP BY e.fuente
     """)
@@ -761,6 +761,136 @@ def obtener_top_gastos(limite=10, desde=None, hasta=None):
         r["valor_fmt"] = f"${r['valor_abs']:,}".replace(",", ".")
     conn.close()
     return rows
+
+# ─── CRUCE ─────────────────────────────────────────────────
+
+def obtener_sin_cruzar(entidad=None, categoria=None, limite=50, offset=0):
+    conn = get_db()
+    c = conn.cursor()
+    params = []
+    sql = """
+        SELECT id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago
+        FROM transacciones
+        WHERE cruzada = 0
+    """
+    if entidad and entidad != 'todas':
+        sql += " AND entidad = ?"
+        params.append(entidad)
+    if categoria:
+        sql += " AND categoria = ?"
+        params.append(categoria)
+
+    count_sql = sql.replace("SELECT id, fecha, fecha_date, descripcion, valor, entidad, categoria, es_ingreso, metodo_pago", "SELECT COUNT(*)")
+    c.execute(count_sql, params)
+    total = c.fetchone()[0]
+
+    sql += " ORDER BY fecha_date DESC LIMIT ? OFFSET ?"
+    params.extend([limite, offset])
+    c.execute(sql, params)
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return {"transacciones": rows, "total": total}
+
+def obtener_sugerencias_cruce(tx_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id, entidad, valor, fecha_date, es_ingreso, descripcion, categoria FROM transacciones WHERE id=?", (tx_id,))
+    src = c.fetchone()
+    if not src:
+        conn.close()
+        return []
+    src = dict(src)
+
+    if src['entidad'] == 'myfinance':
+        target = ('nequi', 'nu', 'rappicard')
+    else:
+        target = ('myfinance',)
+
+    placeholders = ','.join('?' for _ in target)
+    c.execute(f"""
+        SELECT id, entidad, valor, fecha_date, es_ingreso, descripcion, categoria
+        FROM transacciones
+        WHERE entidad IN ({placeholders}) AND cruzada = 0 AND es_ingreso = ?
+    """, (*target, src['es_ingreso']))
+    candidates = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    from datetime import date as dt_date
+    src_valor = abs(src['valor'])
+    src_fecha = dt_date.fromisoformat(src['fecha_date']) if src['fecha_date'] else None
+
+    resultados = []
+    for cand in candidates:
+        cand_valor = abs(cand['valor'])
+        cand_fecha = dt_date.fromisoformat(cand['fecha_date']) if cand['fecha_date'] else None
+        max_valor = max(src_valor, cand_valor)
+        diff_valor = abs(src_valor - cand_valor)
+        if diff_valor > max(0.05 * max_valor, 5000):
+            continue
+        if src_fecha and cand_fecha:
+            diff_dias = abs((src_fecha - cand_fecha).days)
+            if diff_dias > 7:
+                continue
+            monto_score = max(0, 1 - diff_valor / max(1, max_valor))
+            fecha_score = max(0, 1 - diff_dias / 7)
+            score = round((monto_score * 0.6 + fecha_score * 0.4) * 100, 1)
+        else:
+            score = 0
+            diff_dias = 999
+
+        resultados.append({
+            'id': cand['id'],
+            'entidad': cand['entidad'],
+            'valor': cand['valor'],
+            'fecha_date': cand['fecha_date'],
+            'descripcion': cand['descripcion'],
+            'categoria': cand['categoria'],
+            'score': score,
+            'diff_valor': round(diff_valor),
+            'diff_dias': diff_dias,
+        })
+
+    resultados.sort(key=lambda x: x['score'], reverse=True)
+    return resultados
+
+def cruzar_transaccion(tx_id_bancaria, tx_id_myfinance):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT categoria, notas FROM transacciones WHERE id=?", (tx_id_myfinance,))
+    myfinance = c.fetchone()
+    if not myfinance:
+        conn.close()
+        return False
+    categoria = myfinance['categoria']
+    notas = myfinance['notas'] or ''
+    c.execute("UPDATE transacciones SET cruzada=1 WHERE id=?", (tx_id_bancaria,))
+    c.execute("UPDATE transacciones SET cruzada=1 WHERE id=?", (tx_id_myfinance,))
+    if categoria:
+        c.execute("UPDATE transacciones SET categoria=? WHERE id=?", (categoria, tx_id_bancaria))
+    if notas:
+        c.execute("UPDATE transacciones SET notas=? WHERE id=?", (notas, tx_id_bancaria))
+    conn.commit()
+    conn.close()
+    return True
+
+def obtener_estadisticas_cruce():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM transacciones WHERE cruzada=0")
+    sin_cruzar = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM transacciones WHERE cruzada=1")
+    cruzadas = c.fetchone()[0]
+    c.execute("SELECT entidad, COUNT(*) as total FROM transacciones WHERE cruzada=0 GROUP BY entidad")
+    por_entidad = [dict(r) for r in c.fetchall()]
+    c.execute("SELECT categoria, COUNT(*) as total FROM transacciones WHERE cruzada=0 GROUP BY categoria")
+    por_categoria = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return {
+        'sin_cruzar': sin_cruzar,
+        'cruzadas': cruzadas,
+        'por_entidad': por_entidad,
+        'por_categoria': por_categoria,
+    }
 
 def obtener_resumen_anual(anio):
     conn = get_db()
