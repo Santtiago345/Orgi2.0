@@ -27,14 +27,14 @@ def parse_colombian_currency(s):
         s = s.replace(",", ".")
     try: return float(s)
     except: return None
-INGRESO_KW = ["ABONO", "NOTA CREDITO", "ACEPTAR PLATA", "TRANS CTA"]
+INGRESO_KW = ["ABONO", "NOTA CREDITO", "ACEPTAR PLATA", "TRANS CTA", "CUENTA-MONEDE"]
 
 
 CLASIFICACION = [
-    (["ABONO", "NOTA CREDITO", "ACEPTAR PLATA", "TRANS CTA"], "Ingreso recurrente"),
+    (["ABONO", "NOTA CREDITO", "ACEPTAR PLATA", "TRANS CTA", "CUENTA-MONEDE"], "Ingreso recurrente"),
     (["RETIRO ATM"], "Retiro efectivo"),
     (["PSE COMPRAS", "PAGOS", "COMPRA"], "Compra PSE"),
-    (["TRANSFERENCIA", "ENVIAR PLATA", "TRANSFIYA"], "Transferencia a personas"),
+    (["TRANSFERENCIA", "ENVIAR PLATA", "TRANSFIYA", "PASO PLATA", "BRE-B"], "Transferencia a personas"),
     (["DISPERSION"], "Compras general"),
 ]
 
