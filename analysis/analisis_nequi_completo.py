@@ -523,10 +523,12 @@ def generar_reportes(conn):
         FROM transacciones
     """)
     total_tx, total_ing, total_egr = cur.fetchone()
+    total_ing = total_ing or 0
+    total_egr = total_egr or 0
     print(f"\n  Total transacciones: {total_tx}")
     print(f"  Total ingresos:      ${total_ing:,.2f}")
     print(f"  Total egresos:       ${total_egr:,.2f}")
-    print(f"  Balance:             ${(total_ing or 0) - (total_egr or 0):,.2f}")
+    print(f"  Balance:             ${total_ing - total_egr:,.2f}")
 
     # Por categoria
     print(f"\n{'='*70}")

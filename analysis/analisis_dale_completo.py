@@ -98,67 +98,53 @@ def parse_dale_pdf(filepath):
     td = re.search(r"Total d[eé]bitos?\s*\$?\s*([\d.,]+)", text, re.IGNORECASE)
     if td: result["total_debitos"] = parse_dale_currency(td.group(1))
 
-    lines = text.split("\n")
-    for line in lines:
+    for line in text.split("\n"):
         line = line.strip()
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})\s+(.+)", line)
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(.+)", line)
         if not m:
             continue
-
         fecha = m.group(1)
-        resto = m.group(2).strip()
+        resto = m.group(3).strip()
 
-        parts = resto.split()
-        if len(parts) < 2:
-            continue
+        is_abono = "+" in resto
+        is_debito = bool(re.search(r'\$\d[\d.,]+\s*-\s', resto))
 
-        valor_debito = None
-        valor_abono = None
-        descripcion_parts = []
+        tokens = resto.split()
+        desc_parts = []
         i = 0
-
-        while i < len(parts):
-            p = parts[i]
-            vm = re.match(r'^[\$\+]*([\d.,]+-?)\s*$', p)
-            if vm:
-                val = parse_dale_currency(vm.group(0))
-                if val is not None:
-                    if val < 0:
-                        valor_debito = abs(val)
-                    else:
-                        valor_abono = val
-                i += 1
-                while i < len(parts):
-                    p2 = parts[i]
-                    sm2 = re.match(r'^[\$\+]*([\d.,]+-?)\s*$', p2)
-                    if sm2:
-                        val2 = parse_dale_currency(p2)
-                        if val2 is not None:
-                            if val2 < 0:
-                                valor_debito = abs(val2)
-                            else:
-                                valor_abono = val2
-                        i += 1
-                    elif re.match(r'^\d{2}:\d{2}', p2):
-                        i += 1
-                        continue
-                    else:
-                        break
-            elif re.match(r'^\d{2}:\d{2}', p):
+        while i < len(tokens):
+            t = tokens[i]
+            if t in ("+", "-"):
                 i += 1
                 continue
-            else:
-                descripcion_parts.append(p)
-                i += 1
+            if t.startswith("$"):
+                break
+            desc_parts.append(t)
+            i += 1
 
-        descripcion = " ".join(descripcion_parts).strip()
-        if not descripcion:
+        descripcion = " ".join(desc_parts).strip()
+
+        valores = []
+        while i < len(tokens):
+            t = tokens[i]
+            if t in ("+", "-"):
+                i += 1
+                continue
+            if t.startswith("$"):
+                valores.append(t)
+            i += 1
+
+        if len(valores) == 0 or not descripcion:
             continue
 
-        if valor_abono is not None and valor_abono > 0:
-            valor_final = valor_abono
-        elif valor_debito is not None and valor_debito > 0:
-            valor_final = -valor_debito
+        valor = parse_dale_currency(valores[0])
+        if valor is None:
+            continue
+
+        if is_abono:
+            valor = abs(valor)
+        elif is_debito:
+            valor = -abs(valor)
         else:
             continue
 
@@ -167,7 +153,7 @@ def parse_dale_pdf(filepath):
             "fecha_date": fecha,
             "descripcion": descripcion[:100],
             "descripcion_normalizada": re.sub(r'[^A-Z0-9\s]', '', descripcion.upper()).strip(),
-            "valor": valor_final,
+            "valor": valor,
             "categoria": clasificar_dale(descripcion),
             "cuota_actual": 1,
             "total_cuotas": 1,

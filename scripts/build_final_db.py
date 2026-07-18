@@ -159,18 +159,21 @@ def load_bank_extractos(db_path, fuente, cursor_final, id_offset):
     
     tipo = "cuenta" if fuente.lower() in ("nequi", "dale", "daviplata") else "tarjeta_credito"
     
+    cursor_final.execute("PRAGMA table_info(extractos)")
+    target_cols = {r[1] for r in cursor_final.fetchall()}
+    
     for r in rows:
         d = dict(r)
         d['fuente'] = fuente.lower()
         d['tipo'] = tipo
         d['id'] = d['id'] + id_offset
         
-        # Build dynamic insert
         cols = []
         vals = []
         for k, v in d.items():
-            cols.append(k)
-            vals.append(v)
+            if k in target_cols:
+                cols.append(k)
+                vals.append(v)
             
         placeholders = ", ".join(["?"] * len(vals))
         col_names = ", ".join(cols)
