@@ -212,9 +212,13 @@ def load_bank_db(db_path, fuente, id_offset):
     return data
 
 def build_database():
-    if os.path.exists(OUTPUT_DB):
-        os.remove(OUTPUT_DB)
-        
+    try:
+        if os.path.exists(OUTPUT_DB):
+            os.remove(OUTPUT_DB)
+    except PermissionError:
+        print("WARNING: No se pudo eliminar final_finanzas.db (en uso). Reconstruyendo sobre la existente.")
+        pass
+
     conn_final = sqlite3.connect(OUTPUT_DB)
     cursor_final = conn_final.cursor()
     create_schema(cursor_final)
