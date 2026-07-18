@@ -69,11 +69,11 @@ FUENTES = {
         "keywords": ["nu financiera", "ayuda@nu.com.co", "nu colombia"],
         "identificadores": ["Nu Financiera"],
     },
-    "rappicard": {
-        "dir": os.path.join(BASE, "data", "rappicard"),
-        "tipo": "tarjeta_credito",
-        "keywords": ["rappicard", "davivienda", "credit_card_statement"],
-        "identificadores": ["RappiCard", "Davivienda"],
+    "daviplata": {
+        "dir": os.path.join(BASE, "data", "daviplata"),
+        "tipo": "cuenta",
+        "keywords": ["daviplata", "depósito de dinero electrónico daviplata", "deposito de dinero electronico daviplata"],
+        "identificadores": ["Daviplata", "DAVIPLATA"],
     },
     "dale": {
         "dir": os.path.join(BASE, "data", "dale"),
@@ -81,11 +81,11 @@ FUENTES = {
         "keywords": ["dale", "dale de davivienda", "davivienda dale"],
         "identificadores": ["Dale", "DALE"],
     },
-    "daviplata": {
-        "dir": os.path.join(BASE, "data", "daviplata"),
-        "tipo": "cuenta",
-        "keywords": ["daviplata", "davivienda daviplata"],
-        "identificadores": ["Daviplata", "DAVIPLATA"],
+    "rappicard": {
+        "dir": os.path.join(BASE, "data", "rappicard"),
+        "tipo": "tarjeta_credito",
+        "keywords": ["rappicard", "credit_card_statement", "davivienda s.a", "banco davivienda"],
+        "identificadores": ["RappiCard", "Davivienda"],
     },
 }
 
@@ -187,6 +187,13 @@ def extraer_periodo_dale(texto):
     m = re.search(r"per[ií]odo\s+de:\s*(\d{4})/(\d{2})", texto, re.IGNORECASE)
     if m:
         return int(m.group(1)), int(m.group(2))
+    # Formato "Periodo del extracto entre: Mes AAAA - Mes AAAA" (Daviplata)
+    m = re.search(r"Periodo del extracto entre:\s*(\w+)\s+(\d{4})\s*[-–—]\s*(\w+)\s+(\d{4})", texto, re.IGNORECASE)
+    if m:
+        mes_fin = MESES_LARGO.get(m.group(3).lower())
+        anio_fin = int(m.group(4))
+        if mes_fin:
+            return anio_fin, mes_fin
     m = re.search(r"(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(\d{4})", texto, re.IGNORECASE)
     if m:
         mes = MESES_LARGO.get(m.group(1).lower())
@@ -364,8 +371,8 @@ def procesar_inbox():
         if pdf_hash in registro:
             info = registro[pdf_hash]
             print(f"\n  [SKIP] {fname} ya fue procesado")
-            print(f"    → Destino original: {info.get('destino', '?')}")
-            print(f"    → Procesado el: {info.get('fecha', '?')}")
+            print(f"    -> Destino original: {info.get('destino', '?')}")
+            print(f"    -> Procesado el: {info.get('fecha', '?')}")
             omitidos += 1
             continue
 
@@ -411,10 +418,10 @@ def ejecutar_pipeline():
     print(f"  EJECUTANDO PIPELINE DE SISTEMATIZACION")
     print(f"{'='*70}")
 
-    # Dale y Daviplata siguen el mismo flujo que Nequi: sus DBs se cargan desde
-    # build_final_db.py directamente, sin scripts específicos de análisis.
     scripts = [
         ("analisis_nequi_completo.py", os.path.join(BASE, "analysis", "analisis_nequi_completo.py"), "Parseando extractos de Nequi a DB..."),
+        ("analisis_daviplata_completo.py", os.path.join(BASE, "analysis", "analisis_daviplata_completo.py"), "Parseando extractos de Daviplata a DB..."),
+        ("analisis_dale_completo.py", os.path.join(BASE, "analysis", "analisis_dale_completo.py"), "Parseando extractos de Dale a DB..."),
         ("analisis_tarjetas_completo.py", os.path.join(BASE, "analysis", "analisis_tarjetas_completo.py"), "Parseando extractos de Tarjetas de Credito a DB..."),
         ("build_final_db.py", os.path.join(BASE, "scripts", "build_final_db.py"), "Construyendo base de datos final consolidada (incluyendo cruces y diferidos)..."),
     ]
