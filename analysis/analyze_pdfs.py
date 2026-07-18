@@ -4,7 +4,8 @@ import re
 import json
 from datetime import datetime
 
-UNLOCKED_DIR = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0\pdf bancos\unlocked"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UNLOCKED_DIR = os.path.join(BASE, "pdf bancos", "unlocked")
 
 def extract_nu_text(pdf_path):
     """Extract text from Nu Bank PDF"""

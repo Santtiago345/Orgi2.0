@@ -7,7 +7,7 @@ import pdfplumber
 # CONFIG
 # ============================================================
 PASSWORD = "REDACTED_PWD"
-BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FUENTES = {
     "nequi":           os.path.join(BASE, "data", "nequi"),
     "nu":              os.path.join(BASE, "data", "nu", "pdfs"),

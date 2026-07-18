@@ -13,7 +13,7 @@ import os, re, json, sqlite3
 from collections import defaultdict
 from datetime import datetime
 
-BASE = r'C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0'
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_UNIFICADA = os.path.join(BASE, 'outputs', 'db', 'finanzas_unificadas.db')
 DB_COMPLETA  = os.path.join(BASE, 'outputs', 'db', 'finanzas_unificada_completa.db')
 

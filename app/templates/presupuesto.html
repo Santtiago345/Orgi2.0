@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page" id="page-presupuesto">
+    <h2 class="page-title">Presupuesto Mensual</h2>
+
+    <div class="presu-selector">
+        <label class="presu-label">Mes</label>
+        <select id="presu-mes" class="presu-select" onchange="cargarPresupuesto()">
+            <option value="1">Enero</option><option value="2">Febrero</option>
+            <option value="3">Marzo</option><option value="4">Abril</option>
+            <option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option>
+            <option value="9">Septiembre</option><option value="10">Octubre</option>
+            <option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+        <label class="presu-label">Año</label>
+        <select id="presu-anio" class="presu-select" onchange="cargarPresupuesto()"></select>
+    </div>
+
+    <div class="presu-grid" id="presu-grid">
+        <div class="presu-loading">Cargando presupuesto...</div>
+    </div>
+</div>
+
+<button class="btn-agregar" onclick="abrirModalPresupuesto()">+</button>
+
+<div class="modal-overlay" id="modal-presupuesto" style="display:none;" onclick="cerrarModalPresupuesto(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h2 class="modal-titulo" id="modal-presu-titulo">Añadir Presupuesto</h2>
+        <form id="form-presupuesto" onsubmit="guardarPresupuesto(event)">
+            <div class="modal-campo">
+                <label>Categoría</label>
+                <div class="categoria-iconos" id="presu-categoria-iconos">
+                    {% for c in categorias %}
+                    <button type="button" class="cat-icono" data-cat="{{ c.id }}" onclick="seleccionarCatPresu(this)" title="{{ c.id }}" style="--cat-color: {{ c.color }}">
+                        {{ c.icono }}
+                        <span class="cat-nombre">{{ c.id[:6] }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="form-presu-categoria" value="">
+                <input type="hidden" id="form-presu-id" value="">
+            </div>
+            <div class="modal-campo">
+                <label>Monto Presupuestado</label>
+                <div class="input-valor-wrapper">
+                    <span class="input-prefix">$</span>
+                    <input type="number" id="form-presu-monto" min="1" step="1000" placeholder="0" required autofocus>
+                </div>
+            </div>
+            <div class="modal-acciones">
+                <button type="button" class="btn-cancelar" onclick="cerrarModalPresupuesto()">Cancelar</button>
+                <button type="submit" class="btn-guardar">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/static/js/presupuesto.js"></script>
+
+<style>
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+.presu-loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+.presu-selector { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+.presu-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+.presu-select { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--surface); color: var(--text); cursor: pointer; }
+
+.presu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.presu-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: box-shadow 0.2s; }
+.presu-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.presu-card.presu-excedido { border-left: 4px solid #dc2626; }
+.presu-card.presu-advertencia { border-left: 4px solid #d97706; }
+.presu-card.presu-ok { border-left: 4px solid #16a34a; }
+
+.presu-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.presu-card-icono { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+.presu-card-info { flex: 1; min-width: 0; }
+.presu-card-nombre { display: block; font-weight: 600; font-size: 14px; }
+.presu-card-sub { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+.presu-card-pct { font-size: 18px; font-weight: 700; white-space: nowrap; }
+.presu-card-pct.bar-safe { color: #16a34a; }
+.presu-card-pct.bar-warning { color: #d97706; }
+.presu-card-pct.bar-danger { color: #dc2626; }
+.presu-card-del { background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px; border-radius: 4px; opacity: 0.5; }
+.presu-card-del:hover { opacity: 1; background: var(--bg); }
+
+.presu-bar-wrap { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+.presu-bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.presu-bar.bar-safe { background: linear-gradient(90deg, #16a34a, #4ade80); }
+.presu-bar.bar-warning { background: linear-gradient(90deg, #d97706, #fbbf24); }
+.presu-bar.bar-danger { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+.presu-card-footer { font-size: 12px; }
+.presu-restante.ok { color: #16a34a; }
+.presu-restante.excedido { color: #dc2626; font-weight: 600; }
+
+@media (max-width: 768px) {
+    .presu-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

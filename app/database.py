@@ -2,8 +2,8 @@ import sqlite3, os
 from datetime import datetime, timedelta, date
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE, "outputs", "db", "finanzas_unificadas.db")
-DB_COMPLETA = os.path.join(BASE, "outputs", "db", "finanzas_unificada_completa.db")
+DB_PATH = os.path.join(BASE, "data", "final_finanzas.db")
+DB_COMPLETA = os.path.join(BASE, "data", "final_finanzas.db")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -20,8 +20,13 @@ def calcular_balance():
     c = conn.cursor()
     c.execute("SELECT COALESCE(SUM(valor),0) FROM transacciones WHERE es_ingreso=1")
     ingresos = c.fetchone()[0]
+    
     c.execute("SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones WHERE es_ingreso=0 AND valor < 0")
     gastos = c.fetchone()[0]
+    
+    c.execute("SELECT COALESCE(SUM(ABS(valor_total)),0) FROM compras_diferidas")
+    gastos += c.fetchone()[0]
+    
     conn.close()
     return round(ingresos - gastos), round(ingresos), round(gastos)
 
@@ -173,29 +178,33 @@ def obtener_cuota_info(conn=None):
         conn = get_db()
         own_conn = True
     c = conn.cursor()
-    # Join transacciones -> cuotas_tc -> compras_tc via extracto_id + valor match + normalized descripcion
-    c.execute("""
-        SELECT t.id as tx_id,
-               c.cuota_numero as cuota_actual,
-               cp.total_cuotas,
-               cp.valor_total,
-               cp.descripcion as compra_desc
-        FROM transacciones t
-        JOIN cuotas_tc c ON t.extracto_id = c.extracto_id
-            AND ROUND(ABS(t.valor)) = ROUND(ABS(c.capital_facturado))
-        JOIN compras_tc cp ON c.compra_id = cp.id
-            AND UPPER(TRIM(t.descripcion)) = cp.descripcion
-        WHERE t.entidad IN ('nu','rappicard')
-          AND t.valor < 0
-    """)
     info = {}
-    for r in c.fetchall():
-        info[r['tx_id']] = {
-            'cuota_actual': r['cuota_actual'],
-            'total_cuotas': r['total_cuotas'],
-            'compra_desc': r['compra_desc'],
-            'valor_total': r['valor_total'],
-        }
+    try:
+        # Join transacciones -> cuotas_tc -> compras_tc via extracto_id + valor match + normalized descripcion
+        c.execute("""
+            SELECT t.id as tx_id,
+                   c.cuota_numero as cuota_actual,
+                   cp.total_cuotas,
+                   cp.valor_total,
+                   cp.descripcion as compra_desc
+            FROM transacciones t
+            JOIN cuotas_tc c ON t.extracto_id = c.extracto_id
+                AND ROUND(ABS(t.valor)) = ROUND(ABS(c.capital_facturado))
+            JOIN compras_tc cp ON c.compra_id = cp.id
+                AND UPPER(TRIM(t.descripcion)) = cp.descripcion
+            WHERE t.entidad IN ('nu','rappicard')
+              AND t.valor < 0
+        """)
+        for r in c.fetchall():
+            info[r['tx_id']] = {
+                'cuota_actual': r['cuota_actual'],
+                'total_cuotas': r['total_cuotas'],
+                'compra_desc': r['compra_desc'],
+                'valor_total': r['valor_total'],
+            }
+    except sqlite3.OperationalError:
+        # tablas relacionadas con cuotas no existen en esta BD -> devolver vacío
+        return {}
     if own_conn:
         conn.close()
     return info
@@ -205,8 +214,11 @@ def obtener_cuota_info(conn=None):
 def obtener_etiquetas():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM etiquetas ORDER BY nombre")
-    rows = [dict(r) for r in c.fetchall()]
+    try:
+        c.execute("SELECT * FROM etiquetas ORDER BY nombre")
+        rows = [dict(r) for r in c.fetchall()]
+    except sqlite3.OperationalError:
+        rows = []
     conn.close()
     return rows
 
@@ -242,14 +254,17 @@ def eliminar_etiqueta(eid):
 
 def obtener_etiquetas_transaccion(conn, transaccion_id):
     c = conn.cursor()
-    c.execute("""
-        SELECT e.id, e.nombre, e.color
-        FROM etiquetas e
-        JOIN transaccion_etiquetas te ON te.etiqueta_id = e.id
-        WHERE te.transaccion_id = ?
-        ORDER BY e.nombre
-    """, (transaccion_id,))
-    return [dict(r) for r in c.fetchall()]
+    try:
+        c.execute("""
+            SELECT e.id, e.nombre, e.color
+            FROM etiquetas e
+            JOIN transaccion_etiquetas te ON te.etiqueta_id = e.id
+            WHERE te.transaccion_id = ?
+            ORDER BY e.nombre
+        """, (transaccion_id,))
+        return [dict(r) for r in c.fetchall()]
+    except sqlite3.OperationalError:
+        return []
 
 def asignar_etiqueta(transaccion_id, etiqueta_id):
     conn = get_db()
@@ -326,22 +341,31 @@ def obtener_transacciones_por_categoria(categoria, fecha_desde=None, fecha_hasta
 # ─── CREDIT PROFILE ──────────────────────────────────────────
 
 def obtener_perfil_crediticia():
-    """Return credit card info and credit data for the credit profile page."""
+    """Return credit card info and credit data for the credit profile page.
+    La deuda total se calcula con base en el ÚLTIMO extracto, no la suma histórica."""
     conn = get_db()
     c = conn.cursor()
 
+    # Obtener el último extracto de cada tarjeta para la deuda actual
     c.execute("""
-        SELECT fuente, COUNT(*) as num_extractos,
-               MAX(anio*100+mes) as ultimo_periodo,
-               SUM(COALESCE(total_pagar,0)) as deuda_total,
-               SUM(COALESCE(pago_minimo,0)) as pago_minimo_total,
-               SUM(COALESCE(cupo_total,0)) as cupo_total,
-               SUM(COALESCE(saldo_anterior,0)) as saldo_anterior,
-               SUM(COALESCE(total_cargos,0)) as total_cargos,
-               SUM(COALESCE(total_abonos,0)) as total_abonos
-        FROM extractos
-        WHERE fuente IN ('nu','rappicard')
-        GROUP BY fuente
+        SELECT e.fuente,
+               COUNT(*) as num_extractos,
+               MAX(e.anio*100+e.mes) as ultimo_periodo,
+               e_last.total_pagar as deuda_total,
+               e_last.pago_minimo as pago_minimo_total,
+               e_last.cupo_total,
+               e_last.saldo_anterior,
+               e_last.total_cargos,
+               e_last.total_abonos,
+               e_last.fecha_corte,
+               e_last.fecha_pago,
+               e_last.anio as ultimo_anio,
+               e_last.mes as ultimo_mes
+        FROM extractos e
+        JOIN extractos e_last ON e_last.fuente = e.fuente
+            AND e_last.anio*100+e_last.mes = (SELECT MAX(ei.anio*100+ei.mes) FROM extractos ei WHERE ei.fuente = e.fuente)
+        WHERE e.fuente IN ('nu','rappicard')
+        GROUP BY e.fuente
     """)
     tarjetas = [dict(r) for r in c.fetchall()]
 
@@ -349,10 +373,11 @@ def obtener_perfil_crediticia():
         SELECT id, archivo, fuente, periodo, anio, mes,
                total_pagar, pago_minimo, cupo_total, saldo_anterior,
                saldo_actual, total_cargos, total_abonos,
-               fecha_corte, fecha_pago, titular
+               fecha_corte, fecha_pago, titular,
+               interes_corriente, tasa_mensual, tasa_anual_ea
         FROM extractos
         WHERE fuente IN ('nu','rappicard')
-        ORDER BY anio DESC, mes DESC
+        ORDER BY fuente, anio DESC, mes DESC
     """)
     extractos_tc = [dict(r) for r in c.fetchall()]
     conn.close()
@@ -361,6 +386,79 @@ def obtener_perfil_crediticia():
         "tarjetas": tarjetas,
         "extractos": extractos_tc,
     }
+
+
+def obtener_prestamos_nequi():
+    """Devuelve los préstamos de Nequi agrupados individualmente con sus pagos.
+    Identifica desembolsos y asocia pagos subsecuentes a cada préstamo."""
+    NEQUI_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'data', 'nequi', 'nequi_finanzas.db')
+    if not os.path.exists(NEQUI_DB):
+        return []
+
+    try:
+        conn = sqlite3.connect(NEQUI_DB)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+
+        # Obtener desembolsos ordenados cronológicamente
+        c.execute("""
+            SELECT fecha_date, descripcion_normalizada, valor, id
+            FROM transacciones
+            WHERE (descripcion_normalizada LIKE '%DESEMBOLSO%PRESTAMO%'
+                OR descripcion_normalizada LIKE '%DESEMBOLSO%CREDITO%')
+              AND valor > 0
+            ORDER BY fecha_date ASC
+        """)
+        desembolsos = [dict(r) for r in c.fetchall()]
+
+        # Obtener todos los pagos de préstamos
+        c.execute("""
+            SELECT fecha_date, descripcion_normalizada, valor, id
+            FROM transacciones
+            WHERE (descripcion_normalizada LIKE '%PAGO%PRESTAMO%'
+                OR descripcion_normalizada LIKE '%PAGO%CREDITO%'
+                OR descripcion_normalizada LIKE '%PAGO TOTAL%')
+              AND valor < 0
+            ORDER BY fecha_date ASC
+        """)
+        pagos_todos = [dict(r) for r in c.fetchall()]
+        conn.close()
+
+        # Agrupar pagos a cada préstamo: el pago va al préstamo más reciente antes de la fecha del pago
+        prestamos = []
+        for i, des in enumerate(desembolsos):
+            fecha_inicio = des['fecha_date']
+            fecha_fin = desembolsos[i+1]['fecha_date'] if i+1 < len(desembolsos) else '9999-12-31'
+
+            pagos_prestamo = [
+                p for p in pagos_todos
+                if fecha_inicio <= p['fecha_date'] < fecha_fin
+            ]
+
+            total_pagado = sum(abs(p['valor']) for p in pagos_prestamo)
+            monto_prestado = des['valor']
+            saldo_pendiente = max(0, monto_prestado - total_pagado)
+            estado = 'pagado' if saldo_pendiente == 0 else 'activo'
+
+            prestamos.append({
+                'fecha_desembolso': des['fecha_date'],
+                'descripcion': des['descripcion_normalizada'],
+                'monto_prestado': monto_prestado,
+                'total_pagado': total_pagado,
+                'saldo_pendiente': saldo_pendiente,
+                'num_pagos': len(pagos_prestamo),
+                'estado': estado,
+                'pagos': [{
+                    'fecha': p['fecha_date'],
+                    'descripcion': p['descripcion_normalizada'],
+                    'valor': abs(p['valor'])
+                } for p in pagos_prestamo]
+            })
+
+        return sorted(prestamos, key=lambda x: x['fecha_desembolso'], reverse=True)
+    except Exception:
+        return []
 
 def obtener_extracto_detalle(extracto_id):
     conn = get_db()
@@ -375,14 +473,21 @@ def obtener_extracto_detalle(extracto_id):
     extr = dict(extr)
 
     c.execute("""
-        SELECT id, fecha, fecha_date, descripcion, valor, categoria, entidad, es_ingreso, notas, metodo_pago
+        SELECT id, fecha, fecha_date, descripcion, valor, categoria, entidad, es_ingreso, notas, metodo_pago, 'transaccion' as tipo_registro
         FROM transacciones
         WHERE extracto_id=?
+        UNION ALL
+        SELECT ct.id, cd.fecha as fecha, cd.fecha as fecha_date, 
+               cd.descripcion || ' (' || ct.num_cuota || '/' || cd.total_cuotas || ')' as descripcion,
+               -ABS(ct.valor_cuota) as valor, cd.categoria, cd.fuente as entidad, 0 as es_ingreso, '' as notas, 'tarjeta' as metodo_pago, 'cuota' as tipo_registro
+        FROM cuotas_tarjeta ct
+        JOIN compras_diferidas cd ON ct.compra_diferida_id = cd.id
+        WHERE ct.extracto_id=?
         ORDER BY fecha_date DESC
-    """, (extracto_id,))
+    """, (extracto_id, extracto_id))
     txs = [dict(r) for r in c.fetchall()]
     for t in txs:
-        t['tags'] = obtener_etiquetas_transaccion(conn, t['id'])
+        t['tags'] = obtener_etiquetas_transaccion(conn, t['id']) if t['tipo_registro'] == 'transaccion' else []
 
     ingresos = [t for t in txs if t['es_ingreso'] == 1]
     gastos = [t for t in txs if t['es_ingreso'] == 0]
@@ -459,3 +564,223 @@ def guardar_config_categoria(nombre, icono, color):
     conn.commit()
     conn.close()
     return True
+
+# ─── PRESUPUESTOS ─────────────────────────────────────────
+
+def _init_presupuestos():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS presupuestos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            categoria TEXT NOT NULL,
+            monto REAL NOT NULL,
+            mes INTEGER NOT NULL,
+            anio INTEGER NOT NULL,
+            UNIQUE(categoria, mes, anio)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def obtener_presupuestos():
+    _init_presupuestos()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM presupuestos ORDER BY categoria")
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+def guardar_presupuesto(categoria, monto, mes, anio):
+    _init_presupuestos()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO presupuestos (categoria, monto, mes, anio)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(categoria, mes, anio) DO UPDATE SET monto=excluded.monto
+    """, (categoria, monto, mes, anio))
+    conn.commit()
+    new_id = c.lastrowid
+    conn.close()
+    return new_id
+
+def eliminar_presupuesto(id):
+    _init_presupuestos()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM presupuestos WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return c.rowcount > 0
+
+def obtener_resumen_presupuesto(mes, anio):
+    _init_presupuestos()
+    conn = get_db()
+    c = conn.cursor()
+
+    # Obtener presupuestos para el mes/año
+    c.execute("SELECT * FROM presupuestos WHERE mes=? AND anio=?", (mes, anio))
+    presupuestos = [dict(r) for r in c.fetchall()]
+
+    # Obtener gastos reales por categoría para el mismo período
+    import calendar
+    last_day = calendar.monthrange(anio, mes)[1]
+    desde = f"{anio:04d}-{mes:02d}-01"
+    hasta = f"{anio:04d}-{mes:02d}-{last_day:02d}"
+
+    c.execute("""
+        SELECT categoria, COALESCE(SUM(ABS(valor)),0) as gastado
+        FROM transacciones
+        WHERE es_ingreso=0 AND fecha_date >= ? AND fecha_date <= ?
+        GROUP BY categoria
+    """, (desde, hasta))
+    gastos = {r["categoria"]: r["gastado"] for r in c.fetchall()}
+
+    conn.close()
+
+    resultado = []
+    for p in presupuestos:
+        gastado = round(gastos.get(p["categoria"], 0))
+        monto = round(p["monto"])
+        pct = round(gastado / monto * 100, 1) if monto > 0 else 0
+        if pct > 100:
+            estado = "excedido"
+        elif pct >= 80:
+            estado = "advertencia"
+        else:
+            estado = "ok"
+        resultado.append({
+            "id": p["id"],
+            "categoria": p["categoria"],
+            "monto": monto,
+            "monto_fmt": f"${monto:,}".replace(",", "."),
+            "gastado": gastado,
+            "gastado_fmt": f"${gastado:,}".replace(",", "."),
+            "porcentaje": pct,
+            "estado": estado,
+        })
+
+    return resultado
+
+# ─── REPORTES ─────────────────────────────────────────────
+
+def obtener_tendencia_mensual(meses=12):
+    conn = get_db()
+    c = conn.cursor()
+    from datetime import date as dt_date
+    hoy = dt_date.today()
+    desde_mes = hoy.month - meses + 1
+    desde_anio = hoy.year
+    while desde_mes <= 0:
+        desde_mes += 12
+        desde_anio -= 1
+    desde = f"{desde_anio:04d}-{desde_mes:02d}-01"
+
+    c.execute("""
+        SELECT
+            strftime('%Y', fecha_date) as anio,
+            strftime('%m', fecha_date) as mes,
+            COALESCE(SUM(CASE WHEN es_ingreso=1 THEN valor ELSE 0 END),0) as ingresos,
+            COALESCE(SUM(CASE WHEN es_ingreso=0 THEN ABS(valor) ELSE 0 END),0) as gastos
+        FROM transacciones
+        WHERE fecha_date >= ?
+        GROUP BY anio, mes
+        ORDER BY anio, mes
+    """, (desde,))
+    rows = [dict(r) for r in c.fetchall()]
+    for r in rows:
+        r["ingresos"] = round(r["ingresos"])
+        r["gastos"] = round(r["gastos"])
+        r["balance"] = r["ingresos"] - r["gastos"]
+    conn.close()
+    return rows
+
+def obtener_comparativa_anual(anio):
+    conn = get_db()
+    c = conn.cursor()
+    anio_ant = anio - 1
+
+    def _gastos_por_categoria(anio_ref):
+        c.execute("""
+            SELECT categoria, COALESCE(SUM(ABS(valor)),0) as total
+            FROM transacciones
+            WHERE es_ingreso=0 AND strftime('%Y', fecha_date) = ?
+            GROUP BY categoria
+            ORDER BY total DESC
+        """, (str(anio_ref),))
+        return {r["categoria"]: round(r["total"]) for r in c.fetchall()}
+
+    actual = _gastos_por_categoria(anio)
+    anterior = _gastos_por_categoria(anio_ant)
+
+    todas_cats = sorted(set(list(actual.keys()) + list(anterior.keys())))
+    resultado = []
+    for cat in todas_cats:
+        ga = actual.get(cat, 0)
+        ant = anterior.get(cat, 0)
+        diff = ga - ant
+        pct = round(diff / ant * 100, 1) if ant > 0 else (100 if ga > 0 else 0)
+        resultado.append({
+            "categoria": cat,
+            "actual": ga,
+            "actual_fmt": f"${ga:,}".replace(",", "."),
+            "anterior": ant,
+            "anterior_fmt": f"${ant:,}".replace(",", "."),
+            "diferencia": diff,
+            "diferencia_fmt": f"${diff:,}".replace(",", "."),
+            "porcentaje_cambio": pct,
+        })
+
+    conn.close()
+    return resultado
+
+def obtener_top_gastos(limite=10, desde=None, hasta=None):
+    conn = get_db()
+    c = conn.cursor()
+    params = []
+    sql = """
+        SELECT id, fecha, fecha_date, descripcion, valor, categoria, entidad, notas, metodo_pago
+        FROM transacciones
+        WHERE es_ingreso=0 AND valor < 0
+    """
+    if desde:
+        sql += " AND fecha_date >= ?"
+        params.append(desde)
+    if hasta:
+        sql += " AND fecha_date <= ?"
+        params.append(hasta)
+    sql += " ORDER BY ABS(valor) DESC LIMIT ?"
+    params.append(limite)
+
+    c.execute(sql, params)
+    rows = [dict(r) for r in c.fetchall()]
+    for r in rows:
+        r["valor_abs"] = round(abs(r["valor"]))
+        r["valor_fmt"] = f"${r['valor_abs']:,}".replace(",", ".")
+    conn.close()
+    return rows
+
+def obtener_resumen_anual(anio):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT
+            COUNT(*) as num_transacciones,
+            COALESCE(SUM(CASE WHEN es_ingreso=1 THEN valor ELSE 0 END),0) as total_ingresos,
+            COALESCE(SUM(CASE WHEN es_ingreso=0 THEN ABS(valor) ELSE 0 END),0) as total_gastos
+        FROM transacciones
+        WHERE strftime('%Y', fecha_date) = ?
+    """, (str(anio),))
+    r = dict(c.fetchone())
+    conn.close()
+    r["total_ingresos"] = round(r["total_ingresos"])
+    r["total_gastos"] = round(r["total_gastos"])
+    r["balance"] = r["total_ingresos"] - r["total_gastos"]
+    r["ingreso_promedio_mensual"] = round(r["total_ingresos"] / 12) if r["total_ingresos"] > 0 else 0
+    r["gasto_promedio_mensual"] = round(r["total_gastos"] / 12) if r["total_gastos"] > 0 else 0
+    for k in ("total_ingresos", "total_gastos", "balance", "ingreso_promedio_mensual", "gasto_promedio_mensual"):
+        v = r[k]
+        r[f"{k}_fmt"] = f"${v:,}".replace(",", ".")
+    return r

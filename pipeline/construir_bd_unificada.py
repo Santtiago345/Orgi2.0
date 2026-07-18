@@ -20,18 +20,28 @@ Archivos generados:
   - outputs/reports/detalle_cruce.csv
 """
 
-import sqlite3, os, re, json, csv
+import sqlite3, os, re, json, csv, sys
 from datetime import datetime, timedelta
 from collections import defaultdict
-from utils.normalize import normalize_valor
 
-BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE not in sys.path:
+    sys.path.insert(0, BASE)
+from utils.normalize import normalize_valor
 OLD_DB = os.path.join(BASE, "data", "myfinance", "MyFinance.db")
 PDF_DB = os.path.join(BASE, "outputs", "db", "finanzas_unificadas.db")
 OUT_DB = os.path.join(BASE, "outputs", "db", "finanzas_unificada_completa.db")
 OUT_JSON = os.path.join(BASE, "outputs", "db", "finanzas_unificada_completa.json")
 OUT_TXT = os.path.join(BASE, "outputs", "reports", "reporte_financiero_completo.txt")
 OUT_CSV_CRUCE = os.path.join(BASE, "outputs", "reports", "detalle_cruce.csv")
+
+MYFINANCE_RELEVANT_TABLES = ["transaction", "category", "sync_link"]
+MYFINANCE_IGNORED_TABLES = [
+    'android_metadata', 'app_notifications_data', 'app_notifications_settings',
+    'budget', 'colors', 'debt_account', 'goal', 'rates', 'regular_payment_period',
+    'reminding', 'sync_action', 'sync_data', 'sync_file', 'syncable_settings',
+    'tag', 'transfer', 'user', 'user_profile', 'in_remote_settings',
+]
 
 MESES = {"ENE":1,"FEB":2,"MAR":3,"ABR":4,"MAY":5,"JUN":6,"JUL":7,"AGO":8,"SEP":9,"OCT":10,"NOV":11,"DIC":12}
 
@@ -61,6 +71,23 @@ def fecha_diff(f1, f2):
 def monto_cercano(m1, m2, tolerancia=1000):
     if m1 == 0 or m2 == 0: return False
     return abs(abs(m1) - abs(m2)) <= tolerancia
+
+
+def parse_fecha(s):
+    if not s: return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s.strip(), fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def normalize_tc_desc(desc):
+    if not desc: return ""
+    txt = re.sub(r'[^A-Z0-9]+', ' ', desc.upper())
+    return re.sub(r'\s+', ' ', txt).strip()
+
 
 def desc_match_keywords(pdf_desc, keywords):
     d = pdf_desc.upper() if pdf_desc else ""
@@ -135,82 +162,74 @@ def cargar_pdfs():
     print(f"  Cargadas {len(raw_txs)} transacciones de PDFs")
 
     # DEDUP TARJETAS CREDITO: misma compra aparece en N extractos mensuales
-    # Identificar grupos de compras unicas por (descripcion, monto)
+    # Identificar grupos de compras unicas por descripcion normalizada y monto
     grupos_tc = defaultdict(list)
     for t in raw_txs:
         if t["fuente"] in ("RappiCard", "Nu"):
-            key = (t["descripcion"].upper(), round(t["monto"], 0))
+            key = (normalize_tc_desc(t["descripcion"]), round(t["monto"], 0))
             grupos_tc[key].append(t)
-    
-    # Para cada grupo, determinar num_cuotas (cuantos periodos UNICOS aparece)
-    compras_dedup = set()
+
+    # Construir una sola transaccion por compra de tarjeta de credito
+    final = [t for t in raw_txs if t["fuente"] == "Nequi"]
+    all_periodos_tc = set()
+    ultima_fecha_tc = None
+
+    grupo_meta = {}
     for key, items in grupos_tc.items():
-        periodos_unicos = set()
-        for it in items:
-            p = it.get("periodo", "")
-            if p: periodos_unicos.add(p)
-        num_cuotas = len(periodos_unicos)
-        
-        # Marcar todos los items del grupo (usaremos solo 1 pero marcamos todos)
-        for it in items:
-            it["num_cuotas"] = num_cuotas
-            it["es_tarjeta_credito"] = 1
-    
-    # Construir lista final: TODOS los Nequi + 1 instancia de cada compra TC
-    final = []
-    tc_contadas = set()
-    for t in raw_txs:
-        if t["fuente"] in ("RappiCard", "Nu"):
-            key = (t["descripcion"].upper(), round(t["monto"], 0))
-            if key in tc_contadas: continue
-            tc_contadas.add(key)
-            # Keep the FIRST occurrence
-        final.append(t)
-    
+        periodos_unicos = {it.get("periodo", "") for it in items if it.get("periodo")}
+        num_cuotas = max(len(periodos_unicos), 1)
+        fechas = [parse_fecha(it["fecha"]) for it in items if parse_fecha(it["fecha"])]
+        if fechas:
+            earliest = min(fechas)
+            latest = max(fechas)
+            if ultima_fecha_tc is None or latest > ultima_fecha_tc:
+                ultima_fecha_tc = latest
+        else:
+            earliest = None
+            latest = None
+
+        # Representative purchase row: earliest observed date
+        rep = min(items, key=lambda it: (parse_fecha(it["fecha"]) or datetime.max.date(), it.get("periodo") or ""))
+        rep = dict(rep)
+        rep["num_cuotas"] = num_cuotas
+        rep["es_tarjeta_credito"] = 1
+        rep["periodo"] = rep.get("periodo") or ""
+        rep["fecha"] = rep.get("fecha") or rep.get("fecha_date") or ""
+        rep["fecha_date"] = rep["fecha"]
+        rep["monto"] = abs(rep.get("monto", rep.get("monto_raw", 0)))
+        rep["monto_raw"] = rep.get("monto_raw", rep["monto"])
+        rep["group_items"] = items
+        grupo_meta[key] = {
+            "rep": rep,
+            "latest": latest,
+        }
+
+    if ultima_fecha_tc is None:
+        ultima_fecha_tc = datetime.min.date()
+
+    # Asignar estado y cuotas pagadas por compra
+    for key, meta in grupo_meta.items():
+        rep = meta["rep"]
+        latest = meta["latest"]
+        num_c = rep.get("num_cuotas", 1)
+        if num_c > 1 and latest == ultima_fecha_tc:
+            rep["estado_pago"] = "en_curso"
+            rep["cuotas_pagadas"] = num_c - 1
+            rep["cuota_actual"] = num_c
+        else:
+            rep["estado_pago"] = "pagada"
+            rep["cuotas_pagadas"] = num_c
+            rep["cuota_actual"] = num_c
+        final.append(rep)
+
     eliminados = len(raw_txs) - len(final)
     if eliminados > 0:
         print(f"  Deduplicadas tarjetas credito: {eliminados} repetidas eliminadas")
         print(f"    RappiCard: {sum(1 for t in raw_txs if t['fuente']=='RappiCard')} -> {sum(1 for t in final if t['fuente']=='RappiCard')}")
         print(f"    Nu: {sum(1 for t in raw_txs if t['fuente']=='Nu')} -> {sum(1 for t in final if t['fuente']=='Nu')}")
     
-    # Determinar ultimo periodo global entre los extractos TC
-    all_periodos_tc = set()
-    for t in raw_txs:
-        if t["fuente"] in ("RappiCard", "Nu") and t.get("periodo"):
-            all_periodos_tc.add(t["periodo"])
-    ultimo_periodo_tc = max(all_periodos_tc) if all_periodos_tc else ""
-    
-    # Asignar campos TC a las que quedaron + estado de pago
-    for t in final:
-        if t["fuente"] in ("RappiCard", "Nu"):
-            key = (t["descripcion"].upper(), round(t["monto"], 0))
-            gi = grupos_tc.get(key, [])
-            if gi:
-                num_c = gi[0].get("num_cuotas", 1)
-                t["num_cuotas"] = num_c
-                t["es_tarjeta_credito"] = 1
-                # Determinar ultimo periodo de esta compra
-                periodos_compra = set()
-                for it in gi:
-                    if it.get("periodo"): periodos_compra.add(it["periodo"])
-                ultimo_periodo_compra = max(periodos_compra) if periodos_compra else ""
-                # Estado: en_curso si aparece en el ultimo periodo global y tiene >1 cuota
-                if num_c > 1 and ultimo_periodo_compra == ultimo_periodo_tc:
-                    t["estado_pago"] = "en_curso"
-                    t["cuotas_pagadas"] = num_c - 1  # falta la ultima cuota
-                else:
-                    t["estado_pago"] = "pagada"
-                    t["cuotas_pagadas"] = num_c
-            else:
-                t["num_cuotas"] = 1
-                t["es_tarjeta_credito"] = 0
-                t["estado_pago"] = "pagada"
-                t["cuotas_pagadas"] = 1
-        else:
-            t["num_cuotas"] = 1
-            t["es_tarjeta_credito"] = 0
-            t["estado_pago"] = "pagada"
-            t["cuotas_pagadas"] = 1
+    # El representante de cada grupo ya tiene num_cuotas, estado_pago y cuotas_pagadas asignados.
+    # No se reasignan los datos nuevamente aquí para no sobreescribir el estado calculado.
     
     ingresos = [t for t in final if t["es_ingreso"]]
     egresos = [t for t in final if not t["es_ingreso"]]
@@ -231,7 +250,12 @@ def cargar_myfinance():
     print("  PASO 2: Cargando MyFinance")
     print("=" * 70)
     if not os.path.exists(OLD_DB):
-        print("  ERROR: DB no encontrada:", OLD_DB); return []
+        print("  ERROR: DB no encontrada:", OLD_DB)
+        return []
+
+    print(f"  Usando tablas MyFinance: {', '.join(MYFINANCE_RELEVANT_TABLES)}")
+    print(f"  Ignorando tablas de metadata/sincronización: {', '.join(MYFINANCE_IGNORED_TABLES)}")
+
     conn = sqlite3.connect(OLD_DB)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
@@ -239,27 +263,116 @@ def cargar_myfinance():
         SELECT t.uid, t.type, t.amountInDefaultCurrency, t.date, t.comment,
                COALESCE(c.title, 'Sin categoria') as category_name
         FROM "transaction" t
-        LEFT JOIN sync_link sl ON sl.entityUid = t.uid AND sl.entityType='Transaction' AND sl.otherType='Category'
-        LEFT JOIN category c ON sl.otherUid = c.uid
-        WHERE t.isRemoved=0 ORDER BY t.date
+        LEFT JOIN sync_link sl ON sl.entityUid = t.uid
+            AND sl.entityType='Transaction' AND sl.otherType='Category'
+        LEFT JOIN category c ON sl.otherUid = c.uid AND c.isRemoved=0
+        WHERE t.isRemoved=0
+        ORDER BY t.date
     """)
+
     seen = set()
     rows = []
     for r in cur.fetchall():
-        if r["uid"] in seen: continue
-        seen.add(r["uid"])
+        uid = r["uid"]
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+
+        if r["type"] not in ("Income", "Expense"):
+            continue
+
+        amount = r["amountInDefaultCurrency"]
+        if amount is None:
+            continue
+
         rows.append({
-            "uid": r["uid"], "type": r["type"],
-            "amount": r["amountInDefaultCurrency"] / 100.0,
+            "uid": uid,
+            "type": r["type"],
+            "amount": amount / 100.0,
             "date": normalizar_fecha(r["date"]),
-            "comment": r["comment"] or "",
+            "comment": (r["comment"] or "").strip(),
             "category": r["category_name"],
         })
+
     conn.close()
     ing = [t for t in rows if t["type"] == "Income"]
     egr = [t for t in rows if t["type"] == "Expense"]
-    print(f"  {len(rows)} tx ({len(ing)} ing, ${sum(t['amount'] for t in ing):,.0f} | {len(egr)} egr, ${sum(t['amount'] for t in egr):,.0f})")
+    print(f"  {len(rows)} tx cargadas ({len(ing)} ingresos, {len(egr)} egresos)")
+    if ing:
+        print(f"    Total ingresos: ${sum(t['amount'] for t in ing):,.0f}")
+    if egr:
+        print(f"    Total egresos: ${sum(t['amount'] for t in egr):,.0f}")
     return rows
+
+
+def merge_myfinance_into_pdf_db(app_txs, cruces):
+    """Merge unmatched MyFinance transactions into the PDF app database."""
+    if not os.path.exists(PDF_DB):
+        print("  ERROR: no se puede actualizar el DB de PDFs, no existe:", PDF_DB)
+        return
+
+    unmatched = [tx for tx in app_txs if tx["uid"] not in {c[0] for c in cruces}]
+    if not unmatched:
+        print("  No hay transacciones MyFinance sin match para agregar al DB de la app.")
+        return
+
+    conn = sqlite3.connect(PDF_DB)
+    cur = conn.cursor()
+
+    # Delete existing synthetic MyFinance extracto and its transacciones to avoid duplicates
+    cur.execute("SELECT id FROM extractos WHERE fuente='myfinance' AND tipo='efectivo'")
+    existing = [row[0] for row in cur.fetchall()]
+    for eid in existing:
+        cur.execute("DELETE FROM transacciones WHERE extracto_id=?", (eid,))
+    if existing:
+        cur.execute("DELETE FROM extractos WHERE id IN ({})".format(
+            ",".join("?" for _ in existing)), existing)
+
+    # Insert synthetic extracto for MyFinance cash transactions
+    fechas = [tx["date"] for tx in unmatched if tx.get("date")]
+    periodo = None
+    anio = None
+    mes = None
+    if fechas:
+        fechas_norm = sorted(fechas)
+        periodo = f"MyFinance {fechas_norm[0][:7]} - {fechas_norm[-1][:7]}"
+        anio = int(fechas_norm[-1][:4])
+        mes = int(fechas_norm[-1][5:7])
+
+    cur.execute("""
+        INSERT INTO extractos
+        (archivo, fuente, tipo, periodo, anio, mes, titular, cuenta,
+         total_pagar, pago_minimo, cupo_total,
+         saldo_anterior, total_abonos, total_cargos, saldo_actual,
+         fecha_corte, fecha_pago, num_transacciones)
+        VALUES (?,?,?,?,?,?,?,?, ?,?,?, ?,?,?,?, ?,?,?)
+    """, (
+        "MyFinance_efectivo.pdf", "myfinance", "efectivo", periodo, anio, mes,
+        "MyFinance", "MyFinance",
+        None, None, None,
+        None, None, None, None,
+        None, None, len(unmatched),
+    ))
+    synthetic_id = cur.lastrowid
+
+    for tx in unmatched:
+        valor = normalize_valor(tx.get("amount", 0), tipo=tx.get("type"))
+        cur.execute("""
+            INSERT INTO transacciones
+            (extracto_id, fecha, fecha_date, descripcion, valor, saldo,
+             entidad, cuenta, periodo, categoria, es_ingreso)
+            VALUES (?,?,?,?,?,?, ?,?,?,?, ?)
+        """, (
+            synthetic_id,
+            tx.get("date"), tx.get("date"), tx.get("comment") or tx.get("category") or "MyFinance",
+            valor, None,
+            "myfinance", "MyFinance", tx.get("date", "")[:7], tx.get("category"),
+            1 if tx.get("type") == "Income" else 0,
+        ))
+
+    conn.commit()
+    conn.close()
+    print(f"  Agregadas {len(unmatched)} transacciones MyFinance sin match al DB de la app ({PDF_DB})")
 
 
 # ============================================================
@@ -441,6 +554,7 @@ def construir_bd(pdf_txs, app_txs, cruces, prestamo_map):
             pdf_original_id INTEGER, app_uid TEXT, entidad TEXT,
             es_tarjeta_credito INTEGER DEFAULT 0,
             num_cuotas INTEGER DEFAULT 1,
+            cuota_actual INTEGER DEFAULT 1,
             cuotas_pagadas INTEGER DEFAULT 1,
             estado_pago TEXT DEFAULT 'pagada',
             prestamo_id TEXT,
@@ -465,14 +579,14 @@ def construir_bd(pdf_txs, app_txs, cruces, prestamo_map):
         c.execute("""
             INSERT INTO transacciones (fecha, monto, descripcion, tipo, categoria, metodo_pago,
                 fuente, pdf_original_id, app_uid, entidad,
-                es_tarjeta_credito, num_cuotas, cuotas_pagadas, estado_pago, prestamo_id, notas)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
+                es_tarjeta_credito, num_cuotas, cuota_actual, cuotas_pagadas, estado_pago, prestamo_id, notas)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             pt["fecha"][:10], monto_norm, pt["descripcion"][:200],
             pt.get("tipo"), pt.get("categoria_pdf", ""),
             f"Tarjeta/{pt['fuente']}",
-            pt["fuente"], pt["pdf_id"], pt["entidad"],
-            pt.get("es_tarjeta_credito", 0), pt.get("num_cuotas", 1),
+            pt["fuente"], pt["pdf_id"], None, pt["entidad"],
+            pt.get("es_tarjeta_credito", 0), pt.get("num_cuotas", 1), pt.get("cuota_actual", 1),
             pt.get("cuotas_pagadas", 1), pt.get("estado_pago", "pagada"),
             pt.get("prestamo_id"),
             'Compra a credito' if pt.get("es_tarjeta_credito") else 'Transaccion de extracto bancario'
@@ -687,6 +801,7 @@ def main():
     print(f"  Match: {len(cruces)} | Sin match: {len(app_txs)-len(cruces)}")
     
     conn = construir_bd(pdf_txs, app_txs, cruces, prestamo_map)
+    merge_myfinance_into_pdf_db(app_txs, cruces)
     exportar_json(conn)
     exportar_csv_cruce(conn)
     exportar_txt(conn)

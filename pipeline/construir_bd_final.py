@@ -13,7 +13,7 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 from utils.normalize import normalize_valor
 
-BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OLD_DB = os.path.join(BASE, "data", "myfinance", "MyFinance.db")
 PDF_DB = os.path.join(BASE, "outputs", "db", "finanzas_unificadas.db")
 OUT_DB = os.path.join(BASE, "outputs", "db", "finanzas_definitiva.db")

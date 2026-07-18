@@ -20,13 +20,41 @@ USO:
   python pipeline/procesar_inbox.py --inbox-only      (solo procesar inbox, sin pipeline)
 """
 
-import os, re, sys, shutil, subprocess
+import os, re, sys, shutil, subprocess, json, hashlib
 import pdfplumber
 from pypdf import PdfReader, PdfWriter
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INBOX_DIR = os.path.join(BASE, "data", "inbox")
 PASSWORD = "REDACTED_PWD"
+PROCESADOS_REGISTRY = os.path.join(BASE, "data", "procesados.json")
+
+
+def cargar_procesados():
+    """Carga el registro de PDFs ya procesados."""
+    if os.path.exists(PROCESADOS_REGISTRY):
+        try:
+            with open(PROCESADOS_REGISTRY, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def guardar_procesados(registro):
+    """Guarda el registro de PDFs procesados."""
+    os.makedirs(os.path.dirname(PROCESADOS_REGISTRY), exist_ok=True)
+    with open(PROCESADOS_REGISTRY, 'w', encoding='utf-8') as f:
+        json.dump(registro, f, indent=2, ensure_ascii=False)
+
+
+def hash_archivo(ruta):
+    """Calcula el hash MD5 de un archivo para detectar duplicados exactos."""
+    h = hashlib.md5()
+    with open(ruta, 'rb') as f:
+        for bloque in iter(lambda: f.read(8192), b''):
+            h.update(bloque)
+    return h.hexdigest()
 
 FUENTES = {
     "nequi": {
@@ -295,17 +323,39 @@ def procesar_inbox():
     print(f"  PROCESANDO {len(pdfs)} PDF(s) DEL INBOX")
     print(f"{'='*70}")
 
+    registro = cargar_procesados()
     exitosos = 0
     fallidos = 0
+    omitidos = 0
 
     for fname in sorted(pdfs):
         ruta = os.path.join(INBOX_DIR, fname)
+        pdf_hash = hash_archivo(ruta)
+
+        if pdf_hash in registro:
+            info = registro[pdf_hash]
+            print(f"\n  [SKIP] {fname} ya fue procesado")
+            print(f"    → Destino original: {info.get('destino', '?')}")
+            print(f"    → Procesado el: {info.get('fecha', '?')}")
+            omitidos += 1
+            continue
+
         if procesar_pdf(ruta):
             exitosos += 1
+            # Registrar como procesado
+            from datetime import datetime
+            destino_final = os.path.join(INBOX_DIR, fname)  # approximation
+            registro[pdf_hash] = {
+                "nombre_original": fname,
+                "destino": fname,
+                "fecha": datetime.now().isoformat()
+            }
         else:
             fallidos += 1
 
-    print(f"\n  RESULTADO INBOX: {exitosos} exitosos, {fallidos} fallidos")
+    guardar_procesados(registro)
+
+    print(f"\n  RESULTADO INBOX: {exitosos} exitosos, {fallidos} fallidos, {omitidos} omitidos (duplicados)")
 
     # Mover los procesados a una subcarpeta "procesados/"
     if exitosos > 0:
@@ -333,22 +383,22 @@ def ejecutar_pipeline():
     print(f"{'='*70}")
 
     scripts = [
-        ("analisis_unificado.py", "Construyendo base de datos unificada..."),
-        ("construir_bd_unificada.py", "Construyendo base de datos completa con cruces..."),
-        ("analisis_tarjetas_completo.py", "Analizando tarjetas de credito..."),
+        ("analisis_nequi_completo.py", os.path.join(BASE, "analysis", "analisis_nequi_completo.py"), "Parseando extractos de Nequi a DB..."),
+        ("analisis_tarjetas_completo.py", os.path.join(BASE, "analysis", "analisis_tarjetas_completo.py"), "Parseando extractos de Tarjetas de Credito a DB..."),
+        ("build_final_db.py", os.path.join(BASE, "scripts", "build_final_db.py"), "Construyendo base de datos final consolidada (incluyendo cruces y diferidos)..."),
     ]
 
-    for script, desc in scripts:
-        ruta = os.path.join(BASE, "analysis", script)
+    for script, ruta, desc in scripts:
         if not os.path.exists(ruta):
-            print(f"  [SKIP] {script} no encontrado")
+            print(f"  [SKIP] {script} no encontrado en {ruta}")
             continue
         print(f"\n  --- {desc} ---")
-        print(f"  Ejecutando: python analysis/{script}")
+        print(f"  Ejecutando: python {ruta}")
         try:
             resultado = subprocess.run(
                 [sys.executable, ruta],
-                capture_output=True, text=True, timeout=300
+                capture_output=True, text=True, timeout=300,
+                cwd=BASE
             )
             if resultado.returncode == 0:
                 print(f"  [OK] {script} completado")
@@ -390,10 +440,8 @@ def main():
         procesados = procesar_inbox()
         if procesados == 0 and not solo_inbox:
             print("\n  No hay PDFs nuevos que procesar.")
-            continuar = input("  Ejecutar pipeline de todas formas? (s/N): ").strip().lower()
-            if continuar != "s":
-                print("  Saliendo.")
-                return
+            print("  Saliendo.")
+            return
 
     if not solo_inbox:
         ejecutar_pipeline()

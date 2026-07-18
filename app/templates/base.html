@@ -7,6 +7,16 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>O</text></svg>">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+    window.Orgi = {
+        categorias: {{ categorias|tojson }},
+        paginas: {{ paginas|tojson }},
+        paginaActual: {{ pagina_actual|tojson }},
+        balanceFmt: {{ balance_fmt|tojson }},
+        totalIngresosFmt: {{ total_ingresos_fmt|tojson }},
+        totalGastosFmt: {{ total_gastos_fmt|tojson }},
+    };
+    </script>
 </head>
 <body>
     <header class="header">

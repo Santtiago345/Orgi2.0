@@ -20,7 +20,7 @@ from pypdf import PdfReader, PdfWriter
 import sqlite3
 from collections import defaultdict
 
-BASE = r'C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0'
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE, 'outputs', 'db', 'finanzas_unificadas.db')
 PASSWORD = 'REDACTED_PWD'
 

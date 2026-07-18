@@ -12,7 +12,7 @@ from pypdf import PdfReader, PdfWriter
 from datetime import datetime
 from collections import defaultdict
 
-PROJECT_DIR = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
 OUTPUT_DIR = os.path.join(PROJECT_DIR, "outputs")
 DB_PATH = os.path.join(OUTPUT_DIR, "db", "finanzas_unificadas.db")
@@ -650,7 +650,19 @@ def main():
     todos, total_tx = procesar_todo()
 
     if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.executescript("""
+                DROP TABLE IF EXISTS transacciones;
+                DROP TABLE IF EXISTS extractos;
+                DROP TABLE IF EXISTS categorias;
+                DROP TABLE IF EXISTS patrones_recurrentes;
+            """)
+            conn.commit()
+            conn.close()
+        except Exception:
+            # Si no es posible eliminar el archivo, usamos la ruta existente y regeneramos las tablas.
+            pass
     conn = sqlite3.connect(DB_PATH)
     crear_db(conn)
     insertar_datos(conn, todos)

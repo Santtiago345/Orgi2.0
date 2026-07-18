@@ -14,7 +14,8 @@ import pdfplumber
 from pypdf import PdfReader, PdfWriter
 from datetime import datetime
 
-PDF_DIR = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0\PDFs_Gmail NEQUI"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PDF_DIR = os.path.join(BASE, "PDFs_Gmail NEQUI")
 UNLOCKED_DIR = os.path.join(PDF_DIR, "unlocked")
 PASSWORD = "REDACTED_PWD"
 OUTPUT_JSON = os.path.join(PDF_DIR, "analisis_nequi.json")

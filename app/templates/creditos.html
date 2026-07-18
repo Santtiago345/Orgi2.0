@@ -1,138 +1,127 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page" id="page-creditos">
-    <h2 class="page-title">Perfil Crediticio</h2>
+    <h2 class="page-title">💳 Perfil Crediticio</h2>
 
-    <div id="creditos-content">
-        <div class="creditos-loading">Cargando perfil crediticio...</div>
+    <!-- TABS -->
+    <div class="creditos-tabs">
+        <button class="ctab active" data-tab="tarjetas" onclick="switchTab('tarjetas')">💳 Tarjetas de Crédito</button>
+        <button class="ctab" data-tab="prestamos" onclick="switchTab('prestamos')">🏦 Préstamos Nequi</button>
+    </div>
+
+    <!-- TARJETAS SECCIÓN -->
+    <div id="tab-tarjetas" class="tab-content">
+        <div id="tarjetas-content">
+            <div class="creditos-loading">Cargando tarjetas...</div>
+        </div>
+    </div>
+
+    <!-- PRÉSTAMOS SECCIÓN -->
+    <div id="tab-prestamos" class="tab-content" style="display:none;">
+        <div id="prestamos-content">
+            <div class="creditos-loading">Cargando préstamos...</div>
+        </div>
     </div>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', cargarPerfil);
-
-function cargarPerfil() {
-    fetch('/api/perfil-crediticio')
-        .then(r => r.json())
-        .then(data => {
-            const container = document.getElementById('creditos-content');
-            if (!data.tarjetas || data.tarjetas.length === 0) {
-                container.innerHTML = '<div class="creditos-loading">Sin informacion de tarjetas de credito</div>';
-                return;
-            }
-
-            let html = '';
-
-            // Resumen de tarjetas
-            const nombres = {nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda'};
-            const iconos = {nu: '💚', rappicard: '💛'};
-            data.tarjetas.forEach(t => {
-                html += `<div class="tc-card">
-                    <div class="tc-card-header">
-                        <span class="tc-card-icono">${iconos[t.fuente] || '💳'}</span>
-                        <div class="tc-card-info">
-                            <span class="tc-card-nombre">${nombres[t.fuente] || t.fuente}</span>
-                            <span class="tc-card-sub">${t.num_extractos} extractos · Ultimo: ${t.ultimo_periodo}</span>
-                        </div>
-                    </div>
-                    <div class="tc-card-grid">
-                        <div class="tc-card-item">
-                            <span class="tc-card-label">Deuda Total</span>
-                            <span class="tc-card-valor highlight">${t.deuda_total_fmt}</span>
-                        </div>
-                        <div class="tc-card-item">
-                            <span class="tc-card-label">Pago Minimo</span>
-                            <span class="tc-card-valor">${t.pago_minimo_total_fmt}</span>
-                        </div>
-                        <div class="tc-card-item">
-                            <span class="tc-card-label">Cupo Total</span>
-                            <span class="tc-card-valor">${t.cupo_total_fmt}</span>
-                        </div>
-                        <div class="tc-card-item">
-                            <span class="tc-card-label">Utilizacion</span>
-                            <span class="tc-card-valor ${t.utilizacion > 70 ? 'danger' : t.utilizacion > 40 ? 'warning' : 'safe'}">${t.utilizacion}%</span>
-                        </div>
-                        <div class="tc-card-item">
-                            <span class="tc-card-label">Total Cargos</span>
-                            <span class="tc-card-valor">${t.total_cargos != null ? formatPesos(t.total_cargos) : '—'}</span>
-                        </div>
-                        <div class="tc-card-item">
-                            <span class="tc-card-label">Total Abonos</span>
-                            <span class="tc-card-valor">${t.total_abonos != null ? formatPesos(t.total_abonos) : '—'}</span>
-                        </div>
-                    </div>
-                </div>`;
-            });
-
-            // Tabla historica de extractos
-            html += `<h3 class="creditos-subtitle">Historial de Extractos</h3>
-                <div class="tc-table-wrap">
-                <table class="tc-table">
-                    <thead><tr>
-                        <th>Periodo</th><th>Total Pagar</th><th>Pago Minimo</th>
-                        <th>Cupo</th><th>Saldo Ant.</th><th>Cargos</th><th>Abonos</th>
-                    </tr></thead><tbody>`;
-
-            data.extractos.forEach(e => {
-                const nombresBanco = {nu: '💚 Nu', rappicard: '💛 RappiCard'};
-                html += `<tr>
-                    <td>${nombresBanco[e.fuente] || e.fuente} ${e.periodo}</td>
-                    <td class="td-highlight">${formatPesos(e.total_pagar)}</td>
-                    <td>${formatPesos(e.pago_minimo)}</td>
-                    <td>${formatPesos(e.cupo_total)}</td>
-                    <td>${formatPesos(e.saldo_anterior)}</td>
-                    <td>${formatPesos(e.total_cargos)}</td>
-                    <td>${formatPesos(e.total_abonos)}</td>
-                </tr>`;
-            });
-
-            html += `</tbody></table></div>`;
-
-            container.innerHTML = html;
-        })
-        .catch(() => {
-            document.getElementById('creditos-content').innerHTML = '<div class="creditos-loading">Error cargando perfil crediticio</div>';
-        });
-}
-
-function formatPesos(val) {
-    if (val == null) return '—';
-    const s = Math.abs(val).toLocaleString('es-CO', {minimumFractionDigits: 0});
-    return val < 0 ? `-$${s}` : `$${s}`;
-}
-</script>
+<script src="/static/js/creditos.js"></script>
 
 <style>
-.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
+/* ── PAGE ─────────────────────────────────────────────── */
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
 .creditos-loading { text-align: center; padding: 40px; color: var(--text-secondary); }
-.creditos-subtitle { font-size: 18px; font-weight: 600; margin: 24px 0 12px; }
+.creditos-subtitle { font-size: 16px; font-weight: 600; margin: 24px 0 10px; }
+.prestamos-intro { color: var(--text-secondary); margin-bottom: 16px; font-size: 14px; }
 
-.tc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
-.tc-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.tc-card-icono { font-size: 36px; }
+/* ── TABS ─────────────────────────────────────────────── */
+.creditos-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid var(--border); padding-bottom: 0; }
+.ctab {
+    padding: 10px 22px; border-radius: 10px 10px 0 0; border: none;
+    background: var(--surface); color: var(--text-secondary);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; border: 1px solid var(--border); border-bottom: none;
+}
+.ctab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.ctab:hover:not(.active) { background: var(--bg); color: var(--text); }
+
+/* ── CARD ─────────────────────────────────────────────── */
+.tc-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 18px;
+    transition: box-shadow 0.2s;
+}
+.tc-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+.tc-card.tc-danger { border-left: 4px solid #dc2626; }
+.tc-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.tc-card-icono { font-size: 38px; }
 .tc-card-nombre { display: block; font-weight: 700; font-size: 18px; }
-.tc-card-sub { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
-.tc-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tc-card-sub { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); margin-top: 3px; flex-wrap: wrap; }
+.tc-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
 .tc-card-item { padding: 12px; background: var(--bg); border-radius: 8px; text-align: center; }
-.tc-card-label { display: block; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-.tc-card-valor { display: block; font-size: 18px; font-weight: 700; }
+.tc-card-label { display: block; font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.tc-card-valor { display: block; font-size: 17px; font-weight: 700; }
+.tc-card-valor.sm { font-size: 13px; }
 .tc-card-valor.highlight { color: var(--primary); }
 .tc-card-valor.safe { color: #16a34a; }
 .tc-card-valor.warning { color: #d97706; }
 .tc-card-valor.danger { color: #dc2626; }
 
-.tc-table-wrap { overflow-x: auto; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); }
-.tc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.tc-table th { padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap; }
-.tc-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+/* Barra de utilización */
+.tc-uso-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.tc-uso-lbl { font-size: 12px; color: var(--text-secondary); }
+.uso-bar-wrap { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.uso-bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.bar-safe { background: linear-gradient(90deg, #16a34a, #4ade80); }
+.bar-warning { background: linear-gradient(90deg, #d97706, #fbbf24); }
+.bar-danger { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+/* badges */
+.badge-ok { background: #dcfce7; color: #15803d; font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+.badge-warn { background: #fef9c3; color: #92400e; font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+
+/* ── TABLA ────────────────────────────────────────────── */
+.tc-table-wrap { overflow-x: auto; background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 24px; }
+.tc-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tc-table th { padding: 9px 10px; text-align: left; font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap; }
+.tc-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .tc-table tr:last-child td { border-bottom: none; }
 .tc-table tr:hover td { background: var(--bg); }
 .td-highlight { font-weight: 700; color: var(--primary); }
+.td-abono { color: #16a34a; font-weight: 600; }
+.td-interes { color: #dc2626; font-size: 11px; }
+.td-tasa { color: var(--text-secondary); font-size: 11px; }
+.td-fecha { font-size: 11px; color: var(--text-secondary); }
+.td-periodo { font-weight: 600; }
+
+/* ── PRÉSTAMOS ────────────────────────────────────────── */
+.prestamo-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 18px;
+    transition: box-shadow 0.2s;
+}
+.prestamo-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+.prestamo-activo { border-left: 4px solid var(--primary); }
+.prestamo-pagado { border-left: 4px solid #16a34a; opacity: 0.85; }
+.prestamo-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.prestamo-num { font-size: 16px; font-weight: 700; }
+.prestamo-fecha { font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; }
+.prestamo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.prestamo-item { padding: 12px; background: var(--bg); border-radius: 8px; text-align: center; }
+.prestamo-barra-wrap { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; }
+.prestamo-barra { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.prestamo-barra-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #6ee7b7); border-radius: 4px; transition: width 0.6s ease; }
+.prestamo-pct { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.prestamo-pagos { margin-top: 12px; }
+.prestamo-pagos summary { font-size: 13px; color: var(--text-secondary); cursor: pointer; padding: 6px 0; }
+.pagos-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+.pagos-table th { padding: 7px 10px; font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--border); text-align: left; }
+.pagos-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.pagos-table tr:last-child td { border-bottom: none; }
 
 @media (max-width: 768px) {
-    .tc-card-grid { grid-template-columns: repeat(2, 1fr); }
+    .tc-card-grid, .prestamo-grid { grid-template-columns: repeat(2, 1fr); }
     .tc-table { font-size: 11px; }
-    .tc-table th, .tc-table td { padding: 6px 8px; }
+    .ctab { padding: 8px 14px; font-size: 13px; }
 }
 </style>
 {% endblock %}

@@ -2,13 +2,13 @@
 MiFinanza - Aplicacion de Gestion Financiera Personal
 ======================================================
 """
-import sqlite3
+import sqlite3, os
 import json
 from datetime import datetime, date
 import sys
 from tabulate import tabulate
 
-BASE = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE, "data", "myfinance", "MyFinance.db")
 DATA_DIR = os.path.join(BASE, "data")
 

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page" id="page-reportes">
+    <h2 class="page-title">Reportes</h2>
+
+    <div class="reportes-tabs">
+        <button class="rtab active" data-tab="tendencia" onclick="switchRTab('tendencia')">📈 Tendencia Mensual</button>
+        <button class="rtab" data-tab="comparativa" onclick="switchRTab('comparativa')">📊 Comparativa Anual</button>
+        <button class="rtab" data-tab="top" onclick="switchRTab('top')">🏆 Top Gastos</button>
+        <button class="rtab" data-tab="resumen" onclick="switchRTab('resumen')">📋 Resumen Anual</button>
+    </div>
+
+    <div id="rtab-tendencia" class="rtab-content">
+        <div class="reporte-card">
+            <h3 class="reporte-titulo">Evolución Mensual (últimos 12 meses)</h3>
+            <div class="reporte-chart-wrap">
+                <canvas id="chart-tendencia"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="rtab-comparativa" class="rtab-content" style="display:none;">
+        <div class="reporte-card">
+            <div class="reporte-header">
+                <h3 class="reporte-titulo">Comparativa por Categoría</h3>
+                <select id="comp-anio" class="presu-select" onchange="cargarComparativa()"></select>
+            </div>
+            <div id="comparativa-content">
+                <div class="reporte-loading">Cargando...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="rtab-top" class="rtab-content" style="display:none;">
+        <div class="reporte-card">
+            <div class="reporte-header">
+                <h3 class="reporte-titulo">Top Gastos</h3>
+                <div class="top-filtros">
+                    <label>Desde: <input type="date" id="top-desde" onchange="cargarTop()"></label>
+                    <label>Hasta: <input type="date" id="top-hasta" onchange="cargarTop()"></label>
+                    <label>Límite:
+                        <select id="top-limite" onchange="cargarTop()">
+                            <option value="5">5</option><option value="10" selected>10</option><option value="20">20</option><option value="50">50</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div id="top-content">
+                <div class="reporte-loading">Cargando...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="rtab-resumen" class="rtab-content" style="display:none;">
+        <div class="reporte-card">
+            <div class="reporte-header">
+                <h3 class="reporte-titulo">Resumen del Año</h3>
+                <select id="res-anio" class="presu-select" onchange="cargarResumen()"></select>
+            </div>
+            <div id="resumen-content">
+                <div class="reporte-loading">Cargando...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/reportes.js"></script>
+
+<style>
+.page-title { font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+
+/* TABS */
+.reportes-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid var(--border); padding-bottom: 0; flex-wrap: wrap; }
+.rtab { padding: 10px 18px; border-radius: 10px 10px 0 0; border: 1px solid var(--border); border-bottom: none; background: var(--surface); color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.rtab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.rtab:hover:not(.active) { background: var(--bg); color: var(--text); }
+
+/* CARDS */
+.reporte-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; }
+.reporte-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+.reporte-titulo { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.reporte-card .reporte-titulo { margin-bottom: 0; }
+.reporte-loading { text-align: center; padding: 32px; color: var(--text-secondary); }
+
+/* CHART */
+.reporte-chart-wrap { position: relative; height: 320px; width: 100%; }
+
+/* COMPARATIVA TABLE */
+.comp-table-wrap { overflow-x: auto; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.comp-table th { padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap; }
+.comp-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.comp-table tr:last-child td { border-bottom: none; }
+.comp-table tr:hover td { background: var(--bg); }
+.comp-table td.positivo { color: #16a34a; font-weight: 600; }
+.comp-table td.negativo { color: #dc2626; font-weight: 600; }
+
+/* TOP GASTOS */
+.top-filtros { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.top-filtros label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+.top-filtros input, .top-filtros select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.top-total { font-size: 14px; margin-bottom: 12px; color: var(--text-secondary); }
+.top-lista { display: flex; flex-direction: column; gap: 6px; }
+.top-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; border: 1px solid var(--border); transition: background 0.15s; }
+.top-item:hover { background: var(--bg); }
+.top-num { font-size: 12px; color: var(--text-secondary); font-weight: 700; min-width: 24px; }
+.top-icono { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; color: #fff; }
+.top-info { flex: 1; min-width: 0; }
+.top-desc { display: block; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-meta { display: block; font-size: 11px; color: var(--text-secondary); }
+.top-valor { font-weight: 700; font-size: 15px; color: #dc2626; white-space: nowrap; }
+
+/* RESUMEN ANUAL GRID */
+.resumen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.resumen-card { padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); text-align: center; background: var(--bg); transition: box-shadow 0.2s; }
+.resumen-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+.res-icon { font-size: 28px; display: block; margin-bottom: 8px; }
+.res-label { display: block; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.res-valor { display: block; font-size: 22px; font-weight: 700; }
+.res-ingresos .res-valor { color: #16a34a; }
+.res-gastos .res-valor { color: #dc2626; }
+.res-balance.positivo .res-valor { color: #16a34a; }
+.res-balance.negativo .res-valor { color: #dc2626; }
+.res-promedio .res-valor { color: var(--primary); }
+.res-promedio-ing .res-valor { color: #0891b2; }
+.res-tx .res-valor { color: var(--text); }
+
+@media (max-width: 768px) {
+    .reportes-tabs { gap: 4px; }
+    .rtab { padding: 8px 12px; font-size: 12px; }
+    .reporte-chart-wrap { height: 240px; }
+    .resumen-grid { grid-template-columns: repeat(2, 1fr); }
+    .reporte-header { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+    .resumen-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

@@ -2,8 +2,9 @@ import os
 import sys
 from pypdf import PdfReader, PdfWriter
 
-PDF_DIR = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0\pdf bancos"
-OUT_DIR = r"C:\Users\Santt\OneDrive\Documentos\Proyectos\Orgi2.0\pdf bancos\unlocked"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PDF_DIR = os.path.join(BASE, "pdf bancos")
+OUT_DIR = os.path.join(BASE, "pdf bancos", "unlocked")
 
 def unlock_pdf(pdf_path, password):
     reader = PdfReader(pdf_path)

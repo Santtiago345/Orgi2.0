@@ -11,9 +11,13 @@ from .database import (
     obtener_etiquetas, crear_etiqueta, actualizar_etiqueta, eliminar_etiqueta,
     obtener_etiquetas_transaccion, asignar_etiqueta, quitar_etiqueta,
     obtener_categorias_lista, obtener_transacciones_por_categoria,
-    obtener_perfil_crediticia,
+    obtener_perfil_crediticia, obtener_prestamos_nequi,
     actualizar_nota, actualizar_categoria_tx,
     renombrar_categoria, obtener_config_categorias, guardar_config_categoria,
+    obtener_presupuestos, guardar_presupuesto, eliminar_presupuesto,
+    obtener_resumen_presupuesto,
+    obtener_tendencia_mensual, obtener_comparativa_anual,
+    obtener_top_gastos, obtener_resumen_anual,
 )
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -101,6 +105,14 @@ def categorias_page():
 def creditos_page():
     return render_template("creditos.html")
 
+@app.route("/presupuesto")
+def presupuesto_page():
+    return render_template("presupuesto.html")
+
+@app.route("/reportes")
+def reportes_page():
+    return render_template("reportes.html")
+
 
 # ─── API: RESUMEN ──────────────────────────────────────────
 
@@ -121,6 +133,28 @@ def api_resumen():
 
     if not desde or not hasta:
         desde, hasta = obtener_rango_fechas(periodo)
+
+    # Si el período actual no tiene transacciones, intentar tomar el último periodo con datos
+    txs = obtener_transacciones_por_periodo(tipo, desde, hasta)
+    if len(txs) == 0:
+        try:
+            ultima = obtener_ultima_fecha()
+            if ultima:
+                # soportar ISO (YYYY-MM-DD) o DD/MM/YYYY
+                try:
+                    yy, mm, dd = ultima.split('-')
+                    y = int(yy); m = int(mm)
+                except Exception:
+                    from datetime import datetime
+                    dt = datetime.strptime(ultima, "%d/%m/%Y")
+                    y = dt.year; m = dt.month
+                # construir desde/hasta para el mes de la última transacción
+                desde = date(y, m, 1)
+                import calendar
+                last = calendar.monthrange(y, m)[1]
+                hasta = date(y, m, last)
+        except Exception:
+            pass
 
     return api_resumen_params(tipo, periodo, desde, hasta)
 
@@ -336,8 +370,8 @@ def api_upload_pdf():
 
     try:
         result = subprocess.run(
-            [sys.executable, os.path.join(BASE, "pipeline", "procesar_inbox.py"), "--inbox-only"],
-            capture_output=True, text=True, timeout=120
+            [sys.executable, os.path.join(BASE, "pipeline", "procesar_inbox.py")],
+            capture_output=True, text=True, timeout=300
         )
         output = result.stdout + result.stderr
         success = result.returncode == 0
@@ -346,6 +380,12 @@ def api_upload_pdf():
         success = False
 
     info = {"archivo_original": file.filename, "archivo_real": real_name, "success": success}
+    # Incluir logs del pipeline (líneas finales) para mostrar al usuario
+    try:
+        lines = [l for l in output.splitlines() if l.strip()]
+        info["logs"] = lines[-40:]
+    except Exception:
+        info["logs"] = []
     if success:
         extractos = obtener_extractos()
         if extractos:
@@ -353,6 +393,10 @@ def api_upload_pdf():
             info["banco"] = ultimo["fuente"]
             info["periodo"] = ultimo["periodo"]
             info["tipo"] = "tarjeta_credito" if ultimo["fuente"] in ("nu", "rappicard") else "cuenta_corriente"
+    else:
+        info["error"] = output.strip().splitlines()[-1] if output else "Error al procesar el PDF"
+        # also include full output in case caller wants more detail
+        info["output_full"] = output
 
     return jsonify(info)
 
@@ -500,21 +544,146 @@ def api_guardar_config_categoria():
     return jsonify({"ok": True})
 
 
-# ─── API: PERFIL CREDITICIO ────────────────────────────────
+# ─── API: PRESUPUESTOS ─────────────────────────────────────
+
+@app.route("/api/presupuestos")
+def api_presupuestos():
+    return jsonify(obtener_presupuestos())
+
+@app.route("/api/presupuestos", methods=["POST"])
+def api_guardar_presupuesto():
+    data = request.get_json()
+    categoria = data.get("categoria", "").strip()
+    try:
+        monto = float(data.get("monto", 0))
+        mes = int(data.get("mes", 0))
+        anio = int(data.get("anio", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Monto, mes y anio requeridos"}), 400
+    if not categoria or monto <= 0 or mes < 1 or mes > 12 or anio < 2000:
+        return jsonify({"error": "Datos invalidos"}), 400
+    new_id = guardar_presupuesto(categoria, monto, mes, anio)
+    return jsonify({"ok": True, "id": new_id})
+
+@app.route("/api/presupuestos/<int:pid>", methods=["DELETE"])
+def api_eliminar_presupuesto(pid):
+    if eliminar_presupuesto(pid):
+        return jsonify({"ok": True})
+    return jsonify({"error": "No encontrado"}), 404
+
+@app.route("/api/presupuestos/resumen")
+def api_resumen_presupuesto():
+    try:
+        mes = int(request.args.get("mes", 0))
+        anio = int(request.args.get("anio", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "mes y anio requeridos"}), 400
+    if mes < 1 or mes > 12 or anio < 2000:
+        return jsonify({"error": "Parametros invalidos"}), 400
+    data = obtener_resumen_presupuesto(mes, anio)
+    for d in data:
+        d["icono"] = icono_categoria(d["categoria"])
+        d["color"] = color_categoria(d["categoria"])
+    return jsonify(data)
+
+
+# ─── API: REPORTES ─────────────────────────────────────────
+
+@app.route("/api/reportes/tendencia")
+def api_tendencia_mensual():
+    try:
+        meses = int(request.args.get("meses", 12))
+    except (TypeError, ValueError):
+        meses = 12
+    return jsonify(obtener_tendencia_mensual(meses))
+
+@app.route("/api/reportes/comparativa")
+def api_comparativa_anual():
+    try:
+        anio = int(request.args.get("anio", 0))
+    except (TypeError, ValueError):
+        anio = 0
+    if anio < 2000:
+        from datetime import date
+        anio = date.today().year
+    data = obtener_comparativa_anual(anio)
+    for d in data:
+        d["icono"] = icono_categoria(d["categoria"])
+        d["color"] = color_categoria(d["categoria"])
+    return jsonify(data)
+
+@app.route("/api/reportes/top-gastos")
+def api_top_gastos():
+    try:
+        limite = int(request.args.get("limite", 10))
+    except (TypeError, ValueError):
+        limite = 10
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    data = obtener_top_gastos(limite, desde, hasta)
+    for d in data:
+        d["icono"] = icono_categoria(d["categoria"])
+        d["color"] = color_categoria(d["categoria"])
+    return jsonify(data)
+
+@app.route("/api/reportes/resumen-anual")
+def api_resumen_anual():
+    try:
+        anio = int(request.args.get("anio", 0))
+    except (TypeError, ValueError):
+        anio = 0
+    if anio < 2000:
+        from datetime import date
+        anio = date.today().year
+    return jsonify(obtener_resumen_anual(anio))
+
+
+# ─── API: PERFIL CREDITICIO ────────────────────────────
 
 @app.route("/api/perfil-crediticio")
 def api_perfil_crediticio():
     data = obtener_perfil_crediticia()
+    import calendar as _cal
+    from datetime import date as _date
+
+    hoy = _date.today()
     for t in data["tarjetas"]:
-        t["deuda_total"] = round(t["deuda_total"])
-        t["deuda_total_fmt"] = formatear_pesos(t["deuda_total"])
-        t["pago_minimo_total"] = round(t["pago_minimo_total"])
+        # Calcular si el extracto está al día (mismo mes y año o no)
+        anio_ext = t.get('ultimo_anio') or 0
+        mes_ext = t.get('ultimo_mes') or 0
+        t["extracto_actualizado"] = (anio_ext == hoy.year and mes_ext == hoy.month)
+        t["periodo_extracto"] = f"{mes_ext:02d}/{anio_ext}" if anio_ext else "—"
+
+        deuda = t.get("deuda_total") or 0
+        t["deuda_total"] = round(deuda)
+        t["deuda_total_fmt"] = formatear_pesos(round(deuda))
+        t["pago_minimo_total"] = round(t.get("pago_minimo_total") or 0)
         t["pago_minimo_total_fmt"] = formatear_pesos(t["pago_minimo_total"])
-        t["cupo_total"] = round(t["cupo_total"])
+        cupo = t.get("cupo_total") or 0
+        t["cupo_total"] = round(cupo)
         t["cupo_total_fmt"] = formatear_pesos(t["cupo_total"])
-        t["utilizacion"] = round(t["deuda_total"] / t["cupo_total"] * 100, 1) if t["cupo_total"] > 0 else 0
+        t["utilizacion"] = round(deuda / cupo * 100, 1) if cupo > 0 else 0
+        t["fecha_corte"] = t.get("fecha_corte") or "—"
+        t["fecha_pago"] = t.get("fecha_pago") or "—"
+
     for e in data["extractos"]:
-        for k in ("total_pagar", "pago_minimo", "cupo_total", "saldo_anterior", "saldo_actual", "total_cargos", "total_abonos"):
+        for k in ("total_pagar", "pago_minimo", "cupo_total", "saldo_anterior",
+                  "saldo_actual", "total_cargos", "total_abonos",
+                  "interes_corriente", "tasa_mensual", "tasa_anual_ea"):
             if e.get(k) is not None:
-                e[k] = round(e[k])
+                e[k] = round(e[k], 2)
     return jsonify(data)
+
+
+@app.route("/api/prestamos-nequi")
+def api_prestamos_nequi():
+    prestamos = obtener_prestamos_nequi()
+    for p in prestamos:
+        p['monto_prestado_fmt'] = formatear_pesos(p['monto_prestado'])
+        p['total_pagado_fmt'] = formatear_pesos(p['total_pagado'])
+        p['saldo_pendiente_fmt'] = formatear_pesos(p['saldo_pendiente'])
+        pct = p['total_pagado'] / p['monto_prestado'] * 100 if p['monto_prestado'] > 0 else 0
+        p['porcentaje_pagado'] = round(pct, 1)
+        for pago in p['pagos']:
+            pago['valor_fmt'] = formatear_pesos(pago['valor'])
+    return jsonify(prestamos)
