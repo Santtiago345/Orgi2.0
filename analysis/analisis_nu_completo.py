@@ -46,7 +46,8 @@ def parse_nu_pdf(filepath):
     result = {"fuente": "nu", "tipo": "tarjeta_credito", "transacciones": [],
               "periodo": None, "anio": None, "mes": None, "titular": None,
               "total_pagar": None, "pago_minimo": None, "cupo_total": None,
-              "cupo_usado": None, "saldo_anterior": None,
+              "cupo_usado": None, "saldo_anterior": None, "saldo_actual": None,
+              "total_cargos": None, "total_abonos": None,
               "interes_corriente": None, "tasa_mensual": None, "tasa_anual_ea": None,
               "fecha_corte": None, "fecha_pago": None}
 
@@ -56,21 +57,31 @@ def parse_nu_pdf(filepath):
             t = p.extract_text()
             if t: text += t + "\n"
 
+    text_flat = text.replace('\n', ' ').replace('\r', ' ')
+
     nm = re.search(r"Joel\s+Santiago\s+Neuta\s+Jaspe", text, re.IGNORECASE)
     if nm: result["titular"] = "JOEL SANTIAGO NEUTA JASPE"
 
-    for key, alias in [("PAGO MÍNIMO", "pago_minimo"),
-                       ("Tu cupo definido", "cupo_total")]:
-        m = re.search(rf"{re.escape(key)}\s*\$?([\d.,]+)", text)
-        if m: result[alias] = m.group(1)
-    if result.get("pago_minimo"):
-        result["total_pagar"] = result["pago_minimo"]
+    pm_match = re.search(r"PAGO\s*M[IÍ]NIMO\s*\$?([\d.,]+)", text_flat)
+    if pm_match:
+        result["pago_minimo"] = pm_match.group(1)
+        result["total_pagar"] = pm_match.group(1)
 
-    im = re.search(r"Intereses.*?\$?\s*([\d.,]+)", text)
+    cupo_match = re.search(r"Tu cupo definido\s*\n.*?\n\s*\$?([\d.,]+)", text, re.DOTALL)
+    if not cupo_match:
+        cupo_match = re.search(r"Tu cupo definido.*?\$([\d.,]+)", text_flat)
+    if cupo_match:
+        result["cupo_total"] = cupo_match.group(1)
+
+    usado_match = re.search(r"Usado[^\d]*(\$?[\d.,]+)", text_flat)
+    if usado_match:
+        result["cupo_usado"] = usado_match.group(1)
+
+    im = re.search(r"Intereses.*?\$?\s*([\d.,]+)", text_flat)
     if im: result["interes_corriente"] = im.group(1)
 
-    pm = re.search(r"(\d+[,.]?\d*)%", text)
-    if pm: result["tasa_mensual"] = pm.group(1)
+    pm_pct = re.search(r"(\d+[,.]?\d*)%", text)
+    if pm_pct: result["tasa_mensual"] = pm_pct.group(1)
 
     per = re.search(r"(\d{1,2}\s+\w+)\s*[-–—]\s*(\d{1,2}\s+\w+\s+\d{4})\s*$", text, re.MULTILINE)
     if not per:
@@ -88,11 +99,23 @@ def parse_nu_pdf(filepath):
         if mes_num:
             result["mes"] = mes_num
 
-    fp = re.search(r"Fecha\s*(?:l[íi]mite\s*de\s*)?pago\s+(\d+\s+\w+\s+\d{4})", text)
+    fp = re.search(r"Fecha\s*(?:l[íi]mite\s*de\s*)?pago[^\d]*(\d+\s+\w+\s+\d{4})", text_flat)
+    if not fp:
+        fp = re.search(r"l[íi]mite\s*de\s*pago[^\d]*(\d+\s+\w+\s+\d{4})", text_flat)
     if fp: result["fecha_pago"] = fp.group(1)
 
-    fc = re.search(r"Fecha de corte\s+(\d+\s+\w+\s+\d{4})", text)
+    fc = re.search(r"Fecha\s*de\s*corte[^\d]*(\d+\s+\w+\s+\d{4})", text_flat)
     if fc: result["fecha_corte"] = fc.group(1)
+
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        if line.count('Fecha') >= 2 and 'Periodo' in line and i + 1 < len(lines):
+            dates_line = lines[i + 1]
+            dates_found = re.findall(r'(\d+\s+\w+\s+\d{4})', dates_line)
+            if len(dates_found) >= 2:
+                result["fecha_pago"] = dates_found[0]
+                result["fecha_corte"] = dates_found[1]
+            break
 
     year = result.get("anio")
     if not year:
@@ -104,7 +127,8 @@ def parse_nu_pdf(filepath):
 
     for line in text.split("\n"):
         line = line.strip()
-        txm = re.match(r"(\d{2})\s+(\w+)\s+(.+?)\s+\$?([\d.,]+)\s+\d+\s+de\s+\d+\s+\$?([\d.,]+)", line)
+        if not line: continue
+        txm = re.match(r"(\d{2})\s+(\w+)\s+(.+?)\s+\$?([\d.,]+)\s+(\d+)\s+de\s+(\d+)\s+\$?([\d.,]+)", line)
         if txm:
             day = txm.group(1)
             mon_name = txm.group(2).upper()[:3]
@@ -120,7 +144,18 @@ def parse_nu_pdf(filepath):
                 "fecha_date": fd,
                 "descripcion": desc,
                 "valor": -v,
+                "cuota_actual": int(txm.group(5)),
+                "total_cuotas": int(txm.group(6)),
             })
+
+    total_cargos = sum(abs(tx["valor"]) for tx in result["transacciones"] if tx["valor"] < 0)
+    total_abonos = sum(tx["valor"] for tx in result["transacciones"] if tx["valor"] > 0)
+    result["total_cargos"] = total_cargos if total_cargos else None
+    result["total_abonos"] = total_abonos if total_abonos else None
+
+    cupo_usado_val = parse_colombian_currency(result.get("cupo_usado"))
+    if cupo_usado_val:
+        result["saldo_actual"] = cupo_usado_val
 
     return result
 
@@ -148,7 +183,9 @@ def main():
         CREATE TABLE IF NOT EXISTS extractos (
             id INTEGER PRIMARY KEY, archivo TEXT, hash TEXT, periodo TEXT, anio INTEGER, mes INTEGER,
             titular TEXT, total_pagar REAL, pago_minimo REAL, cupo_total REAL,
-            saldo_anterior REAL, fecha_corte TEXT, fecha_pago TEXT,
+            saldo_anterior REAL, saldo_actual REAL,
+            total_cargos REAL, total_abonos REAL,
+            fecha_corte TEXT, fecha_pago TEXT,
             interes_corriente REAL, tasa_mensual REAL, tasa_anual_ea REAL,
             es_refinanciacion INTEGER DEFAULT 0, num_transacciones INTEGER
         );
@@ -184,12 +221,23 @@ def main():
             tasa_mensual = parse_colombian_currency(data.get("tasa_mensual"))
             tasa_anual_ea = parse_colombian_currency(data.get("tasa_anual_ea"))
 
+            saldo_actual_raw = data.get("saldo_actual")
+            if isinstance(saldo_actual_raw, (int, float)):
+                saldo_actual = saldo_actual_raw
+            else:
+                saldo_actual = parse_colombian_currency(saldo_actual_raw)
+
+            total_cargos = data.get("total_cargos")
+            total_abonos = data.get("total_abonos")
+
             c.execute("""INSERT INTO extractos (id, archivo, hash, periodo, anio, mes, titular,
-                total_pagar, pago_minimo, cupo_total, saldo_anterior,
+                total_pagar, pago_minimo, cupo_total, saldo_anterior, saldo_actual,
+                total_cargos, total_abonos,
                 fecha_corte, fecha_pago, interes_corriente, tasa_mensual, tasa_anual_ea, num_transacciones)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (extracto_id, fname, file_hash, data["periodo"], data["anio"], data["mes"], data["titular"],
-                 total_pagar, pago_minimo, cupo_total, saldo_anterior,
+                 total_pagar, pago_minimo, cupo_total, saldo_anterior, saldo_actual,
+                 total_cargos, total_abonos,
                  data.get("fecha_corte"), data.get("fecha_pago"),
                  interes_corriente, tasa_mensual, tasa_anual_ea,
                  len(data["transacciones"])))

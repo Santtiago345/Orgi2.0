@@ -65,7 +65,8 @@ def parse_rappicard_pdf(filepath):
     result = {"fuente": "rappicard", "tipo": "tarjeta_credito", "transacciones": [],
               "periodo": None, "anio": None, "mes": None, "titular": None,
               "total_pagar": None, "pago_minimo": None, "cupo_total": None,
-              "cupo_usado": None, "saldo_anterior": None,
+              "cupo_usado": None, "saldo_anterior": None, "saldo_actual": None,
+              "total_cargos": None, "total_abonos": None,
               "interes_corriente": None, "tasa_mensual": None, "tasa_anual_ea": None,
               "fecha_corte": None, "fecha_pago": None}
 
@@ -149,6 +150,19 @@ def parse_rappicard_pdf(filepath):
                     "valor": -v,
                 })
 
+    total_cargos = sum(abs(tx["valor"]) for tx in result["transacciones"] if tx["valor"] < 0)
+    total_abonos = sum(tx["valor"] for tx in result["transacciones"] if tx["valor"] > 0)
+    result["total_cargos"] = total_cargos if total_cargos else None
+    result["total_abonos"] = total_abonos if total_abonos else None
+
+    saldo_anterior_val = parse_colombian_currency(result.get("saldo_anterior"))
+    if saldo_anterior_val and result["total_cargos"] and result["total_abonos"] is not None:
+        result["saldo_actual"] = saldo_anterior_val + result["total_cargos"] - (result["total_abonos"] or 0)
+    elif result["total_cargos"]:
+        cupo = parse_colombian_currency(result.get("cupo_usado"))
+        if cupo:
+            result["saldo_actual"] = cupo
+
     return result
 
 def main():
@@ -175,7 +189,9 @@ def main():
         CREATE TABLE IF NOT EXISTS extractos (
             id INTEGER PRIMARY KEY, archivo TEXT, hash TEXT, periodo TEXT, anio INTEGER, mes INTEGER,
             titular TEXT, total_pagar REAL, pago_minimo REAL, cupo_total REAL,
-            saldo_anterior REAL, fecha_corte TEXT, fecha_pago TEXT,
+            saldo_anterior REAL, saldo_actual REAL,
+            total_cargos REAL, total_abonos REAL,
+            fecha_corte TEXT, fecha_pago TEXT,
             interes_corriente REAL, tasa_mensual REAL, tasa_anual_ea REAL,
             es_refinanciacion INTEGER DEFAULT 0, num_transacciones INTEGER
         );
@@ -211,12 +227,22 @@ def main():
             tasa_mensual = parse_colombian_currency(data.get("tasa_mensual"))
             tasa_anual_ea = parse_colombian_currency(data.get("tasa_anual_ea"))
 
+            saldo_actual_raw = data.get("saldo_actual")
+            if isinstance(saldo_actual_raw, (int, float)):
+                saldo_actual_val = saldo_actual_raw
+            else:
+                saldo_actual_val = parse_colombian_currency(saldo_actual_raw)
+            total_cargos = data.get("total_cargos")
+            total_abonos = data.get("total_abonos")
+
             c.execute("""INSERT INTO extractos (id, archivo, hash, periodo, anio, mes, titular,
-                total_pagar, pago_minimo, cupo_total, saldo_anterior,
+                total_pagar, pago_minimo, cupo_total, saldo_anterior, saldo_actual,
+                total_cargos, total_abonos,
                 fecha_corte, fecha_pago, interes_corriente, tasa_mensual, tasa_anual_ea, num_transacciones)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (extracto_id, fname, file_hash, data["periodo"], data["anio"], data["mes"], data["titular"],
-                 total_pagar, pago_minimo, cupo_total, saldo_anterior,
+                 total_pagar, pago_minimo, cupo_total, saldo_anterior, saldo_actual_val,
+                 total_cargos, total_abonos,
                  data.get("fecha_corte"), data.get("fecha_pago"),
                  interes_corriente, tasa_mensual, tasa_anual_ea,
                  len(data["transacciones"])))

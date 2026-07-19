@@ -26,11 +26,18 @@ def calcular_balance():
         WHERE es_ingreso=0 AND valor < 0 AND entidad IN ('nequi','dale','daviplata','myfinance')""")
     eg_cuentas = c.fetchone()[0]
     
-    c.execute("""SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones 
-        WHERE es_ingreso=0 AND valor < 0 AND entidad IN ('nu','rappicard')""")
+    c.execute("""SELECT COALESCE(SUM(e_last.total_pagar),0) FROM extractos e_last
+        WHERE e_last.fuente IN ('nu','rappicard')
+        AND (e_last.anio IS NOT NULL AND e_last.mes IS NOT NULL)
+        AND e_last.id = (
+            SELECT e2.id FROM extractos e2 
+            WHERE e2.fuente = e_last.fuente 
+            AND e2.anio IS NOT NULL AND e2.mes IS NOT NULL
+            ORDER BY e2.anio DESC, e2.mes DESC LIMIT 1
+        )""")
     deuda_tc = c.fetchone()[0]
     
-    c.execute("SELECT COALESCE(SUM(ABS(valor_total)),0) FROM compras_diferidas")
+    c.execute("SELECT COALESCE(SUM(ABS(valor_total)),0) FROM compras_diferidas WHERE fuente IN ('nu','rappicard')")
     deuda_tc += c.fetchone()[0]
     
     c.execute("SELECT COALESCE(SUM(valor),0) FROM transacciones WHERE es_ingreso=1")
