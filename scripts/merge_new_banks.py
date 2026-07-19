@@ -7,10 +7,12 @@ FINAL_DB = os.path.join(BASE, "data", "final_finanzas.db")
 
 DAVIPLATA_DB = os.path.join(BASE, "data", "daviplata", "daviplata_finanzas.db")
 DALE_DB = os.path.join(BASE, "data", "dale", "dale_finanzas.db")
+CUENTA_NU_DB = os.path.join(BASE, "data", "cuenta_nu", "cuenta_nu_finanzas.db")
 
 BANKS = [
     ("daviplata", DAVIPLATA_DB, 4000),
     ("dale", DALE_DB, 3000),
+    ("cuenta_nu", CUENTA_NU_DB, 5000),
 ]
 
 MESES = {'ENE':1,'FEB':2,'MAR':3,'ABR':4,'MAY':5,'JUN':6,'JUL':7,'AGO':8,'SEP':9,'OCT':10,'NOV':11,'DIC':12,

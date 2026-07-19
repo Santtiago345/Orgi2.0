@@ -58,13 +58,29 @@ def parse_cuenta_nu_pdf(filepath):
     pm = re.search(r"Nu\s+Placa\s+(\w+)", text, re.IGNORECASE)
     if pm: result["placa"] = pm.group(1)
 
-    pm2 = re.search(r"Per[ií]odo\s+\d{2}\s*[-–—]\s*\d{2}\s+(\w+)\s+(\d{4})", text, re.IGNORECASE)
+    pm2 = re.search(r"Per[ií]odo\s+.*?([A-Za-z]+)\s+(\d{4})", text, re.IGNORECASE)
     if pm2:
         mes = MESES.get(pm2.group(1).upper()[:3])
         if mes:
             result["anio"] = int(pm2.group(2))
             result["mes"] = mes
             result["periodo"] = f"{result['anio']}/{mes:02d}"
+    if not result.get("periodo"):
+        pm2 = re.search(r"Lleg[oó] tu extracto de\s+([A-Za-z]+)", text, re.IGNORECASE)
+        if pm2:
+            mes = MESES.get(pm2.group(1).upper()[:3])
+            if mes:
+                ym = re.search(r"(\d{4})", text)
+                anio = int(ym.group(1)) if ym else 2024
+                result["anio"] = anio
+                result["mes"] = mes
+                result["periodo"] = f"{anio}/{mes:02d}"
+    if not result.get("periodo"):
+        m = re.search(r"(\d{4})[_-](\d{2})", filepath)
+        if m:
+            result["anio"] = int(m.group(1))
+            result["mes"] = int(m.group(2))
+            result["periodo"] = f"{result['anio']}/{result['mes']:02d}"
 
     sm = re.search(r"Tu dinero al inicio del mes\s*\$?([\d.,]+)", text)
     if sm: result["saldo_inicial"] = parse_valor(sm.group(1))

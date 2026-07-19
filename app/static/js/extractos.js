@@ -85,6 +85,7 @@ function subirPDF(file, restantes = 0) {
                 resultDiv.style.display = 'block';
                 cargarExtractos();
                 document.getElementById('upload-card').style.display = 'block';
+                procesarCola();
             } else {
                 document.getElementById('upload-card').style.display = 'block';
                 const resultDiv = document.getElementById('upload-result');
@@ -92,6 +93,7 @@ function subirPDF(file, restantes = 0) {
                 if (data.logs && data.logs.length > 0) mostrarLogs(data.logs);
                 resultDiv.style.display = 'block';
                 document.getElementById('upload-card').style.display = 'block';
+                procesarCola();
             }
         })
         .catch(err => {
