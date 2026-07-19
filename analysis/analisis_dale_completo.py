@@ -2,7 +2,7 @@
 Analisis COMPLETO de extractos Dale
 Parea PDFs, clasifica transacciones, genera data/dale/dale_finanzas.db
 """
-import os, re, sqlite3
+import os, re, sqlite3, hashlib
 import pdfplumber
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -168,6 +168,7 @@ def crear_db():
         CREATE TABLE IF NOT EXISTS extractos (
             id INTEGER PRIMARY KEY,
             archivo TEXT,
+            hash TEXT,
             fuente TEXT,
             tipo TEXT,
             periodo TEXT,
@@ -222,12 +223,19 @@ def main():
 
     for fname in sorted(pdfs):
         path = os.path.join(PDF_DIR, fname)
+        # Calcular hash del PDF
+        file_hash = ""
+        try:
+            with open(path, "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+        except:
+            pass
         try:
             data = parse_dale_pdf(path)
             extracto_id += 1
-            c.execute("""INSERT INTO extractos (id, archivo, fuente, tipo, periodo, anio, mes, titular, deposito, saldo_inicial, saldo_final, total_abonos, total_debitos, num_transacciones)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (extracto_id, fname, "dale", "cuenta",
+            c.execute("""INSERT INTO extractos (id, archivo, hash, fuente, tipo, periodo, anio, mes, titular, deposito, saldo_inicial, saldo_final, total_abonos, total_debitos, num_transacciones)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (extracto_id, fname, file_hash, "dale", "cuenta",
                  data["periodo"], data["anio"], data["mes"], data["titular"],
                  data["deposito"], data["saldo_inicial"], data["saldo_final"],
                  data["total_abonos"], data["total_debitos"],

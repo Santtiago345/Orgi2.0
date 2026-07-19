@@ -3,7 +3,7 @@ Analisis COMPLETO de extractos RappiCard
 ==========================================
 Parsea PDFs de RappiCard, genera data/rappicard/rappicard_finanzas.db
 """
-import os, re, sqlite3
+import os, re, sqlite3, hashlib
 import pdfplumber
 from datetime import datetime
 
@@ -173,7 +173,7 @@ def main():
     c = conn.cursor()
     c.executescript("""
         CREATE TABLE IF NOT EXISTS extractos (
-            id INTEGER PRIMARY KEY, archivo TEXT, periodo TEXT, anio INTEGER, mes INTEGER,
+            id INTEGER PRIMARY KEY, archivo TEXT, hash TEXT, periodo TEXT, anio INTEGER, mes INTEGER,
             titular TEXT, total_pagar REAL, pago_minimo REAL, cupo_total REAL,
             saldo_anterior REAL, fecha_corte TEXT, fecha_pago TEXT,
             interes_corriente REAL, tasa_mensual REAL, tasa_anual_ea REAL,
@@ -192,6 +192,13 @@ def main():
     extracto_id = 0
     for fname in sorted(pdfs):
         path = os.path.join(PDF_DIR, fname)
+        # Calcular hash del PDF
+        file_hash = ""
+        try:
+            with open(path, "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+        except:
+            pass
         try:
             data = parse_rappicard_pdf(path)
             extracto_id += 1
@@ -204,11 +211,11 @@ def main():
             tasa_mensual = parse_colombian_currency(data.get("tasa_mensual"))
             tasa_anual_ea = parse_colombian_currency(data.get("tasa_anual_ea"))
 
-            c.execute("""INSERT INTO extractos (id, archivo, periodo, anio, mes, titular,
+            c.execute("""INSERT INTO extractos (id, archivo, hash, periodo, anio, mes, titular,
                 total_pagar, pago_minimo, cupo_total, saldo_anterior,
                 fecha_corte, fecha_pago, interes_corriente, tasa_mensual, tasa_anual_ea, num_transacciones)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (extracto_id, fname, data["periodo"], data["anio"], data["mes"], data["titular"],
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (extracto_id, fname, file_hash, data["periodo"], data["anio"], data["mes"], data["titular"],
                  total_pagar, pago_minimo, cupo_total, saldo_anterior,
                  data.get("fecha_corte"), data.get("fecha_pago"),
                  interes_corriente, tasa_mensual, tasa_anual_ea,

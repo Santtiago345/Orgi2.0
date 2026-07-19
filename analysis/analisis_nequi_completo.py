@@ -7,6 +7,7 @@ Analisis COMPLETO de extractos Nequi + Clasificacion + DB SQLite
 - Guarda en SQLite para usar en la app de finanzas
 """
 import os
+import hashlib
 import re
 import json
 import shutil
@@ -266,6 +267,7 @@ def crear_db(conn):
         CREATE TABLE IF NOT EXISTS extractos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             archivo TEXT UNIQUE,
+            hash TEXT,
             periodo TEXT,
             anio INTEGER,
             mes INTEGER,
@@ -367,12 +369,12 @@ def insertar_datos(conn, datos_extractos):
         # Insert extracto
         c.execute("""
             INSERT OR REPLACE INTO extractos
-            (archivo, periodo, anio, mes, titular, cuenta,
+            (archivo, hash, periodo, anio, mes, titular, cuenta,
              saldo_anterior, total_abonos, total_cargos,
              saldo_actual, saldo_promedio, intereses, num_transacciones)
-            VALUES (?,?,?,?,?,?, ?,?,?, ?,?,?,?)
+            VALUES (?,?,?,?,?,?,?, ?,?,?, ?,?,?,?)
         """, (
-            ex["archivo"], ex["periodo"], ex["anio"], ex["mes"], ex["titular"], ex["cuenta"],
+            ex["archivo"], ex["hash"], ex["periodo"], ex["anio"], ex["mes"], ex["titular"], ex["cuenta"],
             float(ex["saldo_anterior"].replace(",","")) if ex["saldo_anterior"] else None,
             float(ex["total_abonos"].replace(",","")) if ex["total_abonos"] else None,
             float(ex["total_cargos"].replace(",","")) if ex["total_cargos"] else None,
@@ -696,8 +698,16 @@ def main():
     datos = []
     for i, f in enumerate(files, 1):
         path = os.path.join(UNLOCKED_DIR, f)
+        # Calcular hash del PDF
+        file_hash = ""
+        try:
+            with open(path, "rb") as fh:
+                file_hash = hashlib.md5(fh.read()).hexdigest()
+        except:
+            pass
         try:
             d = parse_pdf(path)
+            d["hash"] = file_hash
             datos.append(d)
             print(f"  [{i}/{len(files)}] {f:40s} -> {d['periodo']:>8s}  ({len(d['transacciones']):3d} tx)")
         except Exception as e:

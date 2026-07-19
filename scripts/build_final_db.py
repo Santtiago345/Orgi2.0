@@ -31,6 +31,7 @@ def create_schema(cursor):
         CREATE TABLE extractos (
             id INTEGER PRIMARY KEY,
             archivo TEXT,
+            hash TEXT,
             periodo TEXT,
             anio INTEGER,
             mes INTEGER,

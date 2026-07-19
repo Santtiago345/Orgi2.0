@@ -5,7 +5,7 @@ Analisis COMPLETO de extractos Daviplata
 - Clasifica cada transaccion
 - Genera data/daviplata/daviplata_finanzas.db
 """
-import os, re, json, sqlite3
+import os, re, json, sqlite3, hashlib
 import pdfplumber
 from datetime import datetime
 
@@ -133,6 +133,7 @@ def crear_db():
         CREATE TABLE IF NOT EXISTS extractos (
             id INTEGER PRIMARY KEY,
             archivo TEXT,
+            hash TEXT,
             fuente TEXT,
             tipo TEXT,
             periodo TEXT,
@@ -184,12 +185,19 @@ def main():
 
     for fname in sorted(pdfs):
         path = os.path.join(PDF_DIR, fname)
+        # Calcular hash del PDF
+        file_hash = ""
+        try:
+            with open(path, "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+        except:
+            pass
         try:
             data = parse_daviplata_pdf(path)
             extracto_id += 1
-            c.execute("""INSERT INTO extractos (id, archivo, fuente, tipo, periodo, anio, mes, titular, saldo_actual, num_transacciones)
-                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (extracto_id, fname, "daviplata", "cuenta",
+            c.execute("""INSERT INTO extractos (id, archivo, hash, fuente, tipo, periodo, anio, mes, titular, saldo_actual, num_transacciones)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (extracto_id, fname, file_hash, "daviplata", "cuenta",
                  data["periodo"], data["anio"], data["mes"], data["titular"],
                  data["saldo"], len(data["transacciones"])))
 
