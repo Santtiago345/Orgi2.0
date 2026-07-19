@@ -373,11 +373,20 @@ def api_upload_pdf():
     file_hash = hash_archivo_bytes(file_bytes)
     file.seek(0)
 
-    if buscar_extracto_duplicado(archivo_hash=file_hash):
-        return jsonify({"error": "Este extracto ya existe (detectado por contenido)", "duplicado": True}), 409
-
-    if buscar_extracto_duplicado(archivo_nombre=file.filename):
-        return jsonify({"error": "Este extracto ya existe en la base de datos", "duplicado": True}), 409
+    dup = buscar_extracto_duplicado(archivo_hash=file_hash)
+    if not dup:
+        dup = buscar_extracto_duplicado(archivo_nombre=file.filename)
+    if dup:
+        return jsonify({
+            "error": "Este extracto ya fue procesado anteriormente",
+            "duplicado": True,
+            "existente": {
+                "archivo": dup["archivo"],
+                "fuente": dup["fuente"],
+                "periodo": dup["periodo"],
+                "num_transacciones": dup["num_transacciones"],
+            }
+        }), 409
 
     safe_name = secure_filename(file.filename)
     if not safe_name:

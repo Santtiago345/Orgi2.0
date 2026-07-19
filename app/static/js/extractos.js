@@ -36,7 +36,15 @@ function subirPDF(file) {
         .then(({status, data}) => {
             clearInterval(intervalId);
             document.getElementById('upload-progress').style.display = 'none';
-            if (status === 409) { document.getElementById('upload-card').style.display = 'block'; alert('Este extracto ya existe en la base de datos'); return; }
+            if (status === 409) {
+                document.getElementById('upload-card').style.display = 'block';
+                const existente = data.existente || {};
+                const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata'};
+                const resultDiv = document.getElementById('upload-result');
+                resultDiv.innerHTML = `<div class="result-duplicate"><span class="result-icon">⚠️</span><div class="result-info"><strong>Extracto ya procesado</strong><p>Banco: ${nombresBanco[existente.fuente] || existente.fuente} | Período: ${existente.periodo || '—'} | ${existente.num_transacciones || 0} transacciones</p><small>Archivo: ${existente.archivo || '—'}</small></div></div>`;
+                resultDiv.style.display = 'block';
+                return;
+            }
             if (status !== 200) { document.getElementById('upload-card').style.display = 'block'; alert('Error: ' + (data.error || 'Error desconocido')); return; }
             const resultDiv = document.getElementById('upload-result');
             if (data.success) {

@@ -169,16 +169,19 @@ def buscar_extracto_duplicado(archivo_nombre=None, archivo_hash=None):
     conn = get_db()
     c = conn.cursor()
     if archivo_hash:
-        c.execute("SELECT COUNT(*) FROM extractos WHERE hash = ?", (archivo_hash,))
-        count = c.fetchone()[0]
-        if count > 0:
+        c.execute("SELECT id, archivo, fuente, periodo, num_transacciones FROM extractos WHERE hash = ?", (archivo_hash,))
+        row = c.fetchone()
+        if row:
             conn.close()
-            return True
+            return dict(row)
     if archivo_nombre:
-        c.execute("SELECT COUNT(*) FROM extractos WHERE archivo LIKE ?", (f"%{archivo_nombre}%",))
-        count = c.fetchone()[0]
+        c.execute("SELECT id, archivo, fuente, periodo, num_transacciones FROM extractos WHERE archivo LIKE ?", (f"%{archivo_nombre}%",))
+        row = c.fetchone()
+        if row:
+            conn.close()
+            return dict(row)
     conn.close()
-    return count > 0
+    return None
 
 # ─── CUOTA DETECTION ─────────────────────────────────────────
 
