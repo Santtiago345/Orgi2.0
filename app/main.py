@@ -6,7 +6,7 @@ try:
 except ImportError:
     pass
 from werkzeug.utils import secure_filename
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 from .database import (
     calcular_balance, obtener_rango_fechas, navegar_periodo, es_periodo_actual,
@@ -420,8 +420,6 @@ def filtrar_logs_usuario(lines, banco):
     user_msgs = [m for m in user_msgs if "build_final_db" not in m.lower() and "Construyendo" not in m]
 
     return user_msgs
-
-import re
 
 @app.route("/api/upload-pdf", methods=["POST"])
 def api_upload_pdf():
