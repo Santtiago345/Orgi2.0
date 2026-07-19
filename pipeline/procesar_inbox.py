@@ -23,10 +23,13 @@ USO:
 import os, re, sys, shutil, subprocess, json, hashlib
 import pdfplumber
 from pypdf import PdfReader, PdfWriter
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INBOX_DIR = os.path.join(BASE, "data", "inbox")
-PASSWORD = "REDACTED_PWD"
+PASSWORD = os.environ.get("PDF_PASSWORD", "")
 PROCESADOS_REGISTRY = os.path.join(BASE, "data", "procesados.json")
 
 
@@ -465,6 +468,10 @@ def ejecutar_pipeline():
 # MAIN
 # ============================================================
 def main():
+    if not PASSWORD:
+        print("ERROR: PDF_PASSWORD no configurado")
+        return
+
     print("=" * 70)
     print("  AUTO-PROCESADOR DE EXTRACTOS BANCARIOS")
     print(f"  Inbox: {INBOX_DIR}")

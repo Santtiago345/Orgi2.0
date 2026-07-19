@@ -1,6 +1,10 @@
 from flask import Flask, jsonify, render_template, request
 from datetime import datetime, date
+from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 import json, os, subprocess, sys
+
+load_dotenv()
 
 from .database import (
     calcular_balance, obtener_rango_fechas, navegar_periodo, es_periodo_actual,
@@ -25,6 +29,7 @@ from .database import (
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
 
 PAGINAS = [
     {"id": "inicio", "nombre": "Inicio", "ruta": "/"},
@@ -360,6 +365,9 @@ def api_upload_pdf():
         return jsonify({"error": "Solo se aceptan archivos PDF"}), 400
 
     file_bytes = file.read()
+    if len(file_bytes) > 5 * 1024 * 1024:
+        return jsonify({"error": "Archivo demasiado grande (maximo 5MB)"}), 400
+
     file_hash = hash_archivo_bytes(file_bytes)
     file.seek(0)
 
@@ -369,12 +377,16 @@ def api_upload_pdf():
     if buscar_extracto_duplicado(archivo_nombre=file.filename):
         return jsonify({"error": "Este extracto ya existe en la base de datos", "duplicado": True}), 409
 
+    safe_name = secure_filename(file.filename)
+    if not safe_name:
+        return jsonify({"error": "Nombre de archivo invalido"}), 400
+
     inbox_dir = os.path.join(BASE, "data", "inbox")
     os.makedirs(inbox_dir, exist_ok=True)
-    ruta_pdf = os.path.join(inbox_dir, file.filename)
+    ruta_pdf = os.path.join(inbox_dir, safe_name)
 
     contador = 0
-    base, ext = os.path.splitext(file.filename)
+    base, ext = os.path.splitext(safe_name)
     while os.path.exists(ruta_pdf):
         contador += 1
         ruta_pdf = os.path.join(inbox_dir, f"{base}_{contador}{ext}")
@@ -428,6 +440,8 @@ def api_crear_etiqueta():
     color = data.get("color", "#6B7280")
     if not nombre:
         return jsonify({"error": "Nombre requerido"}), 400
+    if len(nombre) > 100:
+        return jsonify({"error": "Nombre demasiado largo (maximo 100 caracteres)"}), 400
     new_id, err = crear_etiqueta(nombre, color)
     if err:
         return jsonify({"error": err}), 409
@@ -440,6 +454,8 @@ def api_actualizar_etiqueta(eid):
     color = data.get("color", "#6B7280")
     if not nombre:
         return jsonify({"error": "Nombre requerido"}), 400
+    if len(nombre) > 100:
+        return jsonify({"error": "Nombre demasiado largo (maximo 100 caracteres)"}), 400
     if actualizar_etiqueta(eid, nombre, color):
         return jsonify({"ok": True})
     return jsonify({"error": "No encontrada"}), 404

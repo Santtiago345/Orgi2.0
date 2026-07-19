@@ -12,6 +12,8 @@ venv/
 # Datos bancarios - PRIVADOS
 data/
 outputs/
+backup/db/
+backup/reports/
 *.db
 *.sqlite
 *.sqlite3
