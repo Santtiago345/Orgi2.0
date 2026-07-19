@@ -37,9 +37,6 @@ def calcular_balance():
         )""")
     deuda_tc = c.fetchone()[0]
     
-    c.execute("SELECT COALESCE(SUM(ABS(valor_total)),0) FROM compras_diferidas WHERE fuente IN ('nu','rappicard')")
-    deuda_tc += c.fetchone()[0]
-    
     c.execute("SELECT COALESCE(SUM(valor),0) FROM transacciones WHERE es_ingreso=1")
     ingresos = c.fetchone()[0]
     c.execute("SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones WHERE es_ingreso=0 AND valor < 0")
