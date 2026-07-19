@@ -156,6 +156,9 @@ def main():
         except:
             file_hash = ""
         data = parse_cuenta_nu_pdf(path)
+        if len(data["transacciones"]) == 0:
+            print(f"  [SKIP] {fname}: sin transacciones")
+            continue
         extracto_id += 1
 
         c.execute("""INSERT INTO extractos (id, archivo, hash, fuente, tipo, periodo, anio, mes, titular, cuenta, placa, saldo_inicial, saldo_final, num_transacciones)

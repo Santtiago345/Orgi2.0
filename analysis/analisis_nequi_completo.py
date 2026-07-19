@@ -708,6 +708,9 @@ def main():
         try:
             d = parse_pdf(path)
             d["hash"] = file_hash
+            if len(d["transacciones"]) == 0:
+                print(f"  [SKIP] {f}: sin transacciones")
+                continue
             datos.append(d)
             print(f"  [{i}/{len(files)}] {f:40s} -> {d['periodo']:>8s}  ({len(d['transacciones']):3d} tx)")
         except Exception as e:

@@ -217,6 +217,9 @@ def main():
             pass
         try:
             data = parse_rappicard_pdf(path)
+            if len(data["transacciones"]) == 0:
+                print(f"  [SKIP] {fname}: sin transacciones")
+                continue
             extracto_id += 1
 
             total_pagar = parse_colombian_currency(data.get("total_pagar"))

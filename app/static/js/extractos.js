@@ -16,6 +16,13 @@ uploadCard.addEventListener('drop', e => {
 function subirMultiplesPDFs(files) {
     const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
     if (pdfs.length === 0) { mostrarError('Solo se aceptan archivos PDF'); return; }
+    pdfs.sort((a, b) => {
+        const getDate = (name) => {
+            const m = name.match(/(\d{4})[_-](\d{2})/);
+            return m ? m[1] + m[2] : '999999';
+        };
+        return getDate(a.name).localeCompare(getDate(b.name));
+    });
     colaSubida.push(...pdfs);
     document.getElementById('upload-result').style.display = 'none';
     if (!subiendo) procesarCola();

@@ -232,6 +232,9 @@ def main():
             pass
         try:
             data = parse_dale_pdf(path)
+            if len(data["transacciones"]) == 0:
+                print(f"  [SKIP] {fname}: sin transacciones")
+                continue
             extracto_id += 1
             c.execute("""INSERT INTO extractos (id, archivo, hash, fuente, tipo, periodo, anio, mes, titular, deposito, saldo_inicial, saldo_final, total_abonos, total_debitos, num_transacciones)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
