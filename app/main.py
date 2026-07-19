@@ -7,7 +7,7 @@ from .database import (
     obtener_transacciones_por_periodo, obtener_gastos_por_categoria,
     agregar_transaccion, obtener_ultima_fecha, obtener_extractos,
     buscar_extracto_duplicado, obtener_extracto_detalle,
-    obtener_cuota_info,
+    obtener_cuota_info, hash_archivo_bytes,
     obtener_etiquetas, crear_etiqueta, actualizar_etiqueta, eliminar_etiqueta,
     obtener_etiquetas_transaccion, asignar_etiqueta, quitar_etiqueta,
     obtener_categorias_lista, obtener_transacciones_por_categoria,
@@ -359,7 +359,14 @@ def api_upload_pdf():
     if not file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Solo se aceptan archivos PDF"}), 400
 
-    if buscar_extracto_duplicado(file.filename):
+    file_bytes = file.read()
+    file_hash = hash_archivo_bytes(file_bytes)
+    file.seek(0)
+
+    if buscar_extracto_duplicado(archivo_hash=file_hash):
+        return jsonify({"error": "Este extracto ya existe (detectado por contenido)", "duplicado": True}), 409
+
+    if buscar_extracto_duplicado(archivo_nombre=file.filename):
         return jsonify({"error": "Este extracto ya existe en la base de datos", "duplicado": True}), 409
 
     inbox_dir = os.path.join(BASE, "data", "inbox")

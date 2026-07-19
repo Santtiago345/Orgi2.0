@@ -74,20 +74,34 @@ function cargarExtractos() {
         .then(data => {
             extractosData = data;
             if (data.length === 0) { container.innerHTML = '<div class="extractos-loading">No hay extractos cargados</div>'; return; }
-            const grupos = {};
-            data.forEach(e => { const key = e.fuente || 'desconocido'; if (!grupos[key]) grupos[key] = []; grupos[key].push(e); });
-const orden = ['nequi', 'nu', 'rappicard', 'dale', 'daviplata'];
-const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard / Davivienda', dale: 'Dale', daviplata: 'Daviplata'};
-            let html = '';
-            orden.forEach(banco => {
-                if (!grupos[banco]) return;
-                html += `<div class="banco-grupo"><h3 class="banco-titulo">${nombres[banco] || banco} <span class="banco-count">${grupos[banco].length} extractos</span></h3><div class="banco-lista">`;
-                grupos[banco].forEach(e => {
-                    const tipo = e.tipo === 'tarjeta_credito' ? '💳' : '🏦';
-                    html += `<div class="extracto-item" onclick="abrirDetalle(${e.id})"><span class="extracto-icono">${tipo}</span><div class="extracto-info"><span class="extracto-periodo">${e.periodo || '—'}</span><span class="extracto-titular">${e.titular || ''}</span></div><span class="extracto-txs">${e.num_transacciones || 0} tx</span></div>`;
+
+            const cuentas = data.filter(e => e.tipo !== 'tarjeta_credito');
+            const tarjetas = data.filter(e => e.tipo === 'tarjeta_credito');
+            const ordenCuentas = ['nequi', 'dale', 'daviplata'];
+            const ordenTarjetas = ['nu', 'rappicard'];
+            const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata'};
+
+            function buildSection(titulo, icono, lista, orden) {
+                if (lista.length === 0) return '';
+                const grupos = {};
+                lista.forEach(e => { const key = e.fuente || 'desconocido'; if (!grupos[key]) grupos[key] = []; grupos[key].push(e); });
+                let html = `<div class="extractos-section"><h2 class="section-title">${icono} ${titulo}</h2>`;
+                orden.forEach(banco => {
+                    if (!grupos[banco]) return;
+                    html += `<div class="banco-grupo"><h3 class="banco-titulo">${nombres[banco] || banco} <span class="banco-count">${grupos[banco].length}</span></h3><div class="banco-lista">`;
+                    grupos[banco].forEach(e => {
+                        const tipoIcono = e.tipo === 'tarjeta_credito' ? '💳' : '🏦';
+                        html += `<div class="extracto-item" onclick="abrirDetalle(${e.id})"><span class="extracto-icono">${tipoIcono}</span><div class="extracto-info"><span class="extracto-periodo">${e.periodo || '—'}</span><span class="extracto-titular">${e.titular || ''}</span></div><span class="extracto-txs">${e.num_transacciones || 0} tx</span></div>`;
+                    });
+                    html += '</div></div>';
                 });
-                html += '</div></div>';
-            });
+                html += '</div>';
+                return html;
+            }
+
+            let html = '';
+            html += buildSection('Cuentas', '🏦', cuentas, ordenCuentas);
+            html += buildSection('Tarjetas de Crédito', '💳', tarjetas, ordenTarjetas);
             container.innerHTML = html;
         })
         .catch(() => { container.innerHTML = '<div class="extractos-loading">Error cargando extractos</div>'; });

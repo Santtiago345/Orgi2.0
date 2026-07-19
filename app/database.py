@@ -160,11 +160,23 @@ def obtener_extractos():
     conn.close()
     return rows
 
-def buscar_extracto_duplicado(archivo_nombre):
+import hashlib
+
+def hash_archivo_bytes(data):
+    return hashlib.md5(data).hexdigest()
+
+def buscar_extracto_duplicado(archivo_nombre=None, archivo_hash=None):
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM extractos WHERE archivo LIKE ?", (f"%{archivo_nombre}%",))
-    count = c.fetchone()[0]
+    if archivo_hash:
+        c.execute("SELECT COUNT(*) FROM extractos WHERE hash = ?", (archivo_hash,))
+        count = c.fetchone()[0]
+        if count > 0:
+            conn.close()
+            return True
+    if archivo_nombre:
+        c.execute("SELECT COUNT(*) FROM extractos WHERE archivo LIKE ?", (f"%{archivo_nombre}%",))
+        count = c.fetchone()[0]
     conn.close()
     return count > 0
 
