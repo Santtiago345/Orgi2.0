@@ -31,7 +31,7 @@ function subirPDF(file) {
             if (status === 409) {
                 document.getElementById('upload-card').style.display = 'block';
                 const existente = data.existente || {};
-                const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata'};
+                const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata', cuenta_nu: 'Cuenta Nu'};
                 const resultDiv = document.getElementById('upload-result');
                 resultDiv.innerHTML = `<div class="result-duplicate"><span class="result-icon">⚠️</span><div class="result-info"><strong>Extracto ya procesado</strong><p>Banco: ${nombresBanco[existente.fuente] || existente.fuente} | Período: ${existente.periodo || '—'} | ${existente.num_transacciones || 0} transacciones</p><small>Archivo: ${existente.archivo || '—'}</small></div></div>`;
                 resultDiv.style.display = 'block';
@@ -109,9 +109,9 @@ function cargarExtractos() {
 
             const cuentas = data.filter(e => e.tipo !== 'tarjeta_credito');
             const tarjetas = data.filter(e => e.tipo === 'tarjeta_credito');
-            const ordenCuentas = ['nequi', 'dale', 'daviplata'];
+            const ordenCuentas = ['nequi', 'dale', 'daviplata', 'cuenta_nu'];
             const ordenTarjetas = ['nu', 'rappicard'];
-            const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata'};
+            const nombres = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata', cuenta_nu: 'Cuenta Nu'};
 
             function buildSection(titulo, icono, lista, orden) {
                 if (lista.length === 0) return '';
@@ -153,8 +153,8 @@ function abrirDetalle(id) {
         .then(d => {
             const isTC = d.es_tarjeta_credito;
             const tipoIcon = isTC ? '💳' : '🏦';
-            const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata'};
-            const nombreBanco = nombresBanco[d.fuente] || d.fuente;
+                const nombresBanco = {nequi: 'Nequi', nu: 'Nu Bank', rappicard: 'RappiCard', dale: 'Dale', daviplata: 'Daviplata', cuenta_nu: 'Cuenta Nu'};
+                const nombreBanco = nombresBanco[d.fuente] || d.fuente;
             document.getElementById('detalle-titulo').textContent = `${tipoIcon} ${nombreBanco} — ${d.periodo}`;
 
             let html = '';

@@ -68,6 +68,12 @@ FUENTES = {
         "keywords": ["extracto de deposito", "extracto de dep", "nequi"],
         "identificadores": ["Nequi", "EXT_NEQUI"],
     },
+    "cuenta_nu": {
+        "dir": os.path.join(BASE, "data", "cuenta_nu"),
+        "tipo": "cuenta",
+        "keywords": ["cuenta nu", "dinero en tu cuenta nu", "cajitas", "tu dinero al inicio del mes"],
+        "identificadores": ["Cuenta Nu", "CUENTA NU"],
+    },
     "nu": {
         "dir": os.path.join(BASE, "data", "nu"),
         "tipo": "tarjeta_credito",
@@ -238,12 +244,23 @@ def extraer_periodo_rappicard(texto):
     return None, None
 
 
+def extraer_periodo_cuenta_nu(texto):
+    # Formato: "Período 01 - 31 MAY 2024"
+    m = re.search(r"Per[ií]odo\s+\d{2}\s*[-–—]\s*\d{2}\s+(\w+)\s+(\d{4})", texto, re.IGNORECASE)
+    if m:
+        mes = MESES.get(m.group(1).lower()[:3]) or MESES_LARGO.get(m.group(1).lower())
+        if mes:
+            return int(m.group(2)), mes
+    return None, None
+
+
 EXTRACTORES = {
     "nequi": extraer_periodo_nequi,
     "nu": extraer_periodo_nu,
     "rappicard": extraer_periodo_rappicard,
     "dale": extraer_periodo_dale,
     "daviplata": extraer_periodo_daviplata,
+    "cuenta_nu": extraer_periodo_cuenta_nu,
 }
 
 
@@ -441,6 +458,7 @@ def ejecutar_pipeline():
         ("analisis_rappicard_completo.py", os.path.join(BASE, "analysis", "analisis_rappicard_completo.py"), "Parseando extractos de RappiCard..."),
         ("analisis_daviplata_completo.py", os.path.join(BASE, "analysis", "analisis_daviplata_completo.py"), "Parseando extractos de Daviplata..."),
         ("analisis_dale_completo.py", os.path.join(BASE, "analysis", "analisis_dale_completo.py"), "Parseando extractos de Dale..."),
+        ("analisis_cuenta_nu_completo.py", os.path.join(BASE, "analysis", "analisis_cuenta_nu_completo.py"), "Parseando extractos de Cuenta Nu..."),
         ("build_final_db.py", os.path.join(BASE, "scripts", "build_final_db.py"), "Construyendo base de datos final..."),
     ]
 

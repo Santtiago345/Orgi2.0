@@ -24,7 +24,7 @@ function cargarEstadisticas() {
                 </div>
             `;
             data.por_entidad.forEach(e => {
-                const nombres = {myfinance: 'MyF', nequi: 'Nequi', nu: 'Nu', rappicard: 'Rappi', dale: 'Dale', daviplata: 'Davi'};
+                const nombres = {myfinance: 'MyF', nequi: 'Nequi', nu: 'Nu', rappicard: 'Rappi', dale: 'Dale', daviplata: 'Davi', cuenta_nu: 'CtaNu'};
                 html += `
                     <div class="cruce-stat-card info">
                         <span class="cruce-stat-valor">${fmt(e.total)}</span>

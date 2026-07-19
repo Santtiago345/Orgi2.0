@@ -20,10 +20,10 @@ def calcular_balance():
     c = conn.cursor()
     
     c.execute("""SELECT COALESCE(SUM(valor),0) FROM transacciones 
-        WHERE es_ingreso=1 AND entidad IN ('nequi','dale','daviplata','myfinance')""")
+        WHERE es_ingreso=1 AND entidad IN ('nequi','dale','daviplata','myfinance','cuenta_nu')""")
     ing_cuentas = c.fetchone()[0]
     c.execute("""SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones 
-        WHERE es_ingreso=0 AND valor < 0 AND entidad IN ('nequi','dale','daviplata','myfinance')""")
+        WHERE es_ingreso=0 AND valor < 0 AND entidad IN ('nequi','dale','daviplata','myfinance','cuenta_nu')""")
     eg_cuentas = c.fetchone()[0]
     
     c.execute("""SELECT COALESCE(SUM(e_last.total_pagar),0) FROM extractos e_last
@@ -840,7 +840,7 @@ def obtener_sugerencias_cruce(tx_id):
     src = dict(src)
 
     if src['entidad'] == 'myfinance':
-        target = ('nequi', 'nu', 'rappicard', 'dale', 'daviplata')
+        target = ('nequi', 'nu', 'rappicard', 'dale', 'daviplata', 'cuenta_nu')
     else:
         target = ('myfinance',)
 
