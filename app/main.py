@@ -354,6 +354,75 @@ def api_extracto_detalle(extracto_id):
     })
 
 
+def filtrar_logs_usuario(lines, banco):
+    banco_nombres = {"nequi": "Nequi", "nu": "Nu Bank", "rappicard": "RappiCard", "dale": "Dale", "daviplata": "Daviplata"}
+    banco_label = banco_nombres.get(banco, banco)
+
+    mensajes = []
+    banco_lines = []
+    banco_actual = None
+    tx_count = 0
+    resultado = ""
+
+    for line in lines:
+        clean = line.strip()
+        # Skip separators and headers
+        if clean.startswith("===") or clean.startswith("---"):
+            continue
+        # Track current bank section
+        for b in banco_nombres:
+            if b in clean.lower() and ("analisis" in clean.lower() or "Parseando" in clean.lower()):
+                if banco_lines:
+                    mensajes.append((banco_actual, banco_lines, tx_count))
+                banco_actual = b
+                banco_lines = []
+                tx_count = 0
+                break
+
+        if re.search(r'\[\d+\]\s+\S+\.pdf:\s+(\d+)\s+transacciones', clean):
+            m = re.search(r'(\d+)\s+transacciones', clean)
+            if m:
+                tx_count = int(m.group(1))
+
+        if "[OK]" in clean:
+            banco_lines.append(clean.split("[OK]")[-1].strip().split(".py")[0].strip() if ".py" in clean else clean)
+        elif "[ERROR]" in clean:
+            mensajes.append(("error", [clean], 0))
+        elif "RESULTADO INBOX" in clean:
+            resultado = clean
+        elif "exitosos" in clean.lower() and "RESULTADO" not in clean:
+            resultado = clean
+
+    if banco_lines or tx_count:
+        mensajes.append((banco_actual or banco, banco_lines, tx_count))
+
+    user_msgs = []
+    for b, blines, tx in mensajes:
+        if b == "error":
+            user_msgs.extend(blines)
+        elif b == banco:
+            if tx > 0:
+                user_msgs.append(f"{banco_label}: {tx} transacciones procesadas")
+            for l in blines:
+                if l:
+                    user_msgs.append(f"{banco_label}: {l}")
+        else:
+            for l in blines:
+                if l and ("procesado" not in l.lower()):
+                    user_msgs.append(f"{l}")
+
+    if resultado:
+        parts = resultado.replace("RESULTADO INBOX:", "").strip()
+        user_msgs.append(parts)
+    elif "build_final_db.py" not in str(user_msgs):
+        pass
+
+    user_msgs = [m for m in user_msgs if "build_final_db" not in m.lower() and "Construyendo" not in m]
+
+    return user_msgs
+
+import re
+
 @app.route("/api/upload-pdf", methods=["POST"])
 def api_upload_pdf():
     if "pdf" not in request.files:
@@ -417,23 +486,38 @@ def api_upload_pdf():
         success = False
 
     info = {"archivo_original": file.filename, "archivo_real": real_name, "success": success}
-    # Incluir logs del pipeline (líneas finales) para mostrar al usuario
     try:
         lines = [l for l in output.splitlines() if l.strip()]
-        info["logs"] = lines[-40:]
+        raw_logs = lines
     except Exception:
-        info["logs"] = []
+        raw_logs = []
     if success:
-        extractos = obtener_extractos()
-        if extractos:
-            ultimo = extractos[0]
-            info["banco"] = ultimo["fuente"]
-            info["periodo"] = ultimo["periodo"]
-            info["tipo"] = "tarjeta_credito" if ultimo["fuente"] in ("nu", "rappicard") else "cuenta_corriente"
+        conn = get_db()
+        c = conn.cursor()
+        banco_detectado = None
+        for line in raw_logs:
+            if "Banco:" in line:
+                banco_detectado = line.split("Banco:")[-1].strip().lower()
+                break
+        if banco_detectado:
+            c.execute("SELECT id, fuente, periodo, num_transacciones FROM extractos WHERE fuente = ? ORDER BY id DESC LIMIT 1", (banco_detectado,))
+            row = c.fetchone()
+            if row:
+                info["banco"] = row["fuente"]
+                info["periodo"] = row["periodo"]
+                info["tipo"] = "tarjeta_credito" if row["fuente"] in ("nu", "rappicard") else "cuenta_corriente"
+        conn.close()
+        if not info.get("banco"):
+            extractos = obtener_extractos()
+            if extractos:
+                ultimo = extractos[0]
+                info["banco"] = ultimo["fuente"]
+                info["periodo"] = ultimo["periodo"]
+                info["tipo"] = "tarjeta_credito" if ultimo["fuente"] in ("nu", "rappicard") else "cuenta_corriente"
     else:
-        info["error"] = output.strip().splitlines()[-1] if output else "Error al procesar el PDF"
-        # also include full output in case caller wants more detail
-        info["output_full"] = output
+        info["error"] = raw_logs[-1] if raw_logs else "Error al procesar el PDF"
+
+    info["logs"] = filtrar_logs_usuario(raw_logs, info.get("banco", ""))
 
     return jsonify(info)
 

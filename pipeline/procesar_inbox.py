@@ -189,16 +189,14 @@ def extraer_periodo_nu(texto):
 
 
 def extraer_periodo_dale(texto):
+    m = re.search(r"Fecha de extracto[:\s]*(\w+)\s+(\d{4})", texto, re.IGNORECASE)
+    if m:
+        mes = MESES_LARGO.get(m.group(1).lower())
+        if mes:
+            return int(m.group(2)), mes
     m = re.search(r"per[ií]odo\s+de:\s*(\d{4})/(\d{2})", texto, re.IGNORECASE)
     if m:
         return int(m.group(1)), int(m.group(2))
-    # Formato "Periodo del extracto entre: Mes AAAA - Mes AAAA" (Daviplata)
-    m = re.search(r"Periodo del extracto entre:\s*(\w+)\s+(\d{4})\s*[-–—]\s*(\w+)\s+(\d{4})", texto, re.IGNORECASE)
-    if m:
-        mes_fin = MESES_LARGO.get(m.group(3).lower())
-        anio_fin = int(m.group(4))
-        if mes_fin:
-            return anio_fin, mes_fin
     m = re.search(r"(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(\d{4})", texto, re.IGNORECASE)
     if m:
         mes = MESES_LARGO.get(m.group(1).lower())
@@ -206,8 +204,22 @@ def extraer_periodo_dale(texto):
             return int(m.group(2)), mes
     return None, None
 
-
-extraer_periodo_daviplata = extraer_periodo_dale
+def extraer_periodo_daviplata(texto):
+    m = re.search(r"Periodo del extracto entre:\s*(\w+)\s+(\d{4})\s*[-–—]\s*(\w+)\s+(\d{4})", texto, re.IGNORECASE)
+    if m:
+        mes_fin = MESES_LARGO.get(m.group(3).lower())
+        anio_fin = int(m.group(4))
+        if mes_fin:
+            return anio_fin, mes_fin
+    m = re.search(r"per[ií]odo\s+de:\s*(\d{4})/(\d{2})", texto, re.IGNORECASE)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = re.search(r"(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(\d{4})", texto, re.IGNORECASE)
+    if m:
+        mes = MESES_LARGO.get(m.group(1).lower())
+        if mes:
+            return int(m.group(2)), mes
+    return None, None
 
 
 def extraer_periodo_rappicard(texto):
