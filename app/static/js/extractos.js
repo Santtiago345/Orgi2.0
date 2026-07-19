@@ -1,4 +1,6 @@
 let extractosData = [];
+let colaSubida = [];
+let subiendo = false;
 
 document.addEventListener('DOMContentLoaded', cargarExtractos);
 
@@ -8,10 +10,26 @@ uploadCard.addEventListener('dragleave', () => uploadCard.classList.remove('drag
 uploadCard.addEventListener('drop', e => {
     e.preventDefault();
     uploadCard.classList.remove('drag-over');
-    if (e.dataTransfer.files.length > 0) subirPDF(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length > 0) subirMultiplesPDFs(e.dataTransfer.files);
 });
 
-function subirPDF(file) {
+function subirMultiplesPDFs(files) {
+    const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length === 0) { mostrarError('Solo se aceptan archivos PDF'); return; }
+    colaSubida.push(...pdfs);
+    document.getElementById('upload-result').style.display = 'none';
+    if (!subiendo) procesarCola();
+}
+
+function procesarCola() {
+    if (colaSubida.length === 0) { subiendo = false; return; }
+    subiendo = true;
+    const file = colaSubida.shift();
+    const restantes = colaSubida.length;
+    subirPDF(file, restantes);
+}
+
+function subirPDF(file, restantes = 0) {
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
         mostrarError('Solo se aceptan archivos PDF');
         return;
@@ -19,7 +37,8 @@ function subirPDF(file) {
     document.getElementById('upload-card').style.display = 'none';
     document.getElementById('upload-result').style.display = 'none';
     document.getElementById('upload-progress').style.display = 'block';
-    document.getElementById('upload-status').textContent = 'Procesando extracto...';
+    const queueMsg = restantes > 0 ? ` (${restantes + 1} en cola)` : '';
+    document.getElementById('upload-status').textContent = 'Procesando extracto...' + queueMsg;
     document.getElementById('upload-substatus').textContent = file.name;
 
     const formData = new FormData();
@@ -35,12 +54,14 @@ function subirPDF(file) {
                 const resultDiv = document.getElementById('upload-result');
                 resultDiv.innerHTML = `<div class="result-duplicate"><span class="result-icon">⚠️</span><div class="result-info"><strong>Extracto ya procesado</strong><p>Banco: ${nombresBanco[existente.fuente] || existente.fuente} | Período: ${existente.periodo || '—'} | ${existente.num_transacciones || 0} transacciones</p><small>Archivo: ${existente.archivo || '—'}</small></div></div>`;
                 resultDiv.style.display = 'block';
+                procesarCola();
                 return;
             }
             if (status !== 200) {
                 document.getElementById('upload-card').style.display = 'block';
                 mostrarError(data.error || 'Error desconocido al procesar');
                 if (data.logs && data.logs.length > 0) mostrarLogs(data.logs);
+                procesarCola();
                 return;
             }
             const resultDiv = document.getElementById('upload-result');
@@ -70,6 +91,7 @@ function subirPDF(file) {
             document.getElementById('upload-progress').style.display = 'none';
             document.getElementById('upload-card').style.display = 'block';
             mostrarError('Error de conexión');
+            procesarCola();
         });
 }
 

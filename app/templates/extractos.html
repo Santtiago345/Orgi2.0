@@ -9,8 +9,8 @@
     <section class="upload-section">
         <div class="upload-card" id="upload-card">
             <div class="upload-icon">📄</div>
-            <p class="upload-text">Arrastra un PDF aquí o haz clic para seleccionar</p>
-            <input type="file" id="pdf-upload-input" accept=".pdf" style="display:none" onchange="subirPDF(this.files[0])">
+            <p class="upload-text">Arrastra uno o varios PDFs aquí o haz clic para seleccionar</p>
+            <input type="file" id="pdf-upload-input" accept=".pdf" multiple style="display:none" onchange="subirMultiplesPDFs(this.files)">
             <button class="btn-upload" onclick="document.getElementById('pdf-upload-input').click()">Seleccionar PDF</button>
         </div>
         <div id="upload-progress" class="upload-progress" style="display:none;">
