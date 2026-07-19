@@ -337,7 +337,9 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .upload-progress p { font-size: 14px; color: var(--text-secondary); }
-.upload-logs { background: #0f1720; color: #e6eef6; padding: 12px; border-radius: 8px; max-height: 260px; overflow:auto; font-size:12px; }
+.upload-resumen { margin-top: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.upload-resumen-linea { font-size: 13px; color: var(--text-secondary); padding: 3px 0; border-bottom: 1px solid var(--border); }
+.upload-resumen-linea:last-child { border-bottom: none; }
 .result-ok { display:flex; gap:12px; align-items:flex-start; }
 .result-icon { font-size:22px }
 .result-info p { margin-top:6px; color:var(--text-secondary); font-size:13px }

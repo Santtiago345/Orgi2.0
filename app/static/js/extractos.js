@@ -13,28 +13,20 @@ uploadCard.addEventListener('drop', e => {
 
 function subirPDF(file) {
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
-        alert('Solo se aceptan archivos PDF');
+        mostrarError('Solo se aceptan archivos PDF');
         return;
     }
     document.getElementById('upload-card').style.display = 'none';
     document.getElementById('upload-result').style.display = 'none';
     document.getElementById('upload-progress').style.display = 'block';
-    const statusEl = document.getElementById('upload-status');
-    const subEl = document.getElementById('upload-substatus');
-    const msgs = ['Desbloqueando PDF', 'Identificando banco', 'Extrayendo transacciones', 'Generando base de datos'];
-    let idx = 0;
-    statusEl.textContent = msgs[0] + '...';
-    subEl.textContent = '';
-    const intervalId = setInterval(() => {
-        idx = (idx + 1) % msgs.length;
-        statusEl.textContent = msgs[idx] + '...';
-    }, 1800);
+    document.getElementById('upload-status').textContent = 'Procesando extracto...';
+    document.getElementById('upload-substatus').textContent = file.name;
+
     const formData = new FormData();
     formData.append('pdf', file);
     fetch('/api/upload-pdf', { method: 'POST', body: formData })
         .then(r => r.json().then(data => ({status: r.status, data})))
         .then(({status, data}) => {
-            clearInterval(intervalId);
             document.getElementById('upload-progress').style.display = 'none';
             if (status === 409) {
                 document.getElementById('upload-card').style.display = 'block';
@@ -45,33 +37,65 @@ function subirPDF(file) {
                 resultDiv.style.display = 'block';
                 return;
             }
-            if (status !== 200) { document.getElementById('upload-card').style.display = 'block'; alert('Error: ' + (data.error || 'Error desconocido')); return; }
+            if (status !== 200) {
+                document.getElementById('upload-card').style.display = 'block';
+                mostrarError(data.error || 'Error desconocido al procesar');
+                if (data.logs && data.logs.length > 0) mostrarLogs(data.logs);
+                return;
+            }
             const resultDiv = document.getElementById('upload-result');
             if (data.success) {
                 const tipoLabel = data.tipo === 'tarjeta_credito' ? 'Tarjeta de Crédito' : 'Cuenta Corriente';
-                let logsHtml = '';
+                let resumenHtml = '';
                 if (data.logs && data.logs.length > 0) {
-                    logsHtml = `<div style="margin-top:8px"><strong>Proceso:</strong><pre class=\"upload-logs\">${data.logs.join('\n')}</pre></div>`;
+                    const lineas = filtrarLogs(data.logs);
+                    if (lineas.length > 0) {
+                        resumenHtml = `<div class="upload-resumen">${lineas.map(l => `<div class="upload-resumen-linea">${l}</div>`).join('')}</div>`;
+                    }
                 }
-                resultDiv.innerHTML = `<div class="result-ok"><span class="result-icon">✅</span><div class="result-info"><strong>${data.archivo_original}</strong><p>Banco: ${data.banco} | Período: ${data.periodo} | Tipo: ${tipoLabel}</p></div></div>` + logsHtml;
+                resultDiv.innerHTML = `<div class="result-ok"><span class="result-icon">✅</span><div class="result-info"><strong>${data.archivo_original}</strong><p>Banco: ${data.banco} | Período: ${data.periodo} | Tipo: ${tipoLabel}</p></div></div>${resumenHtml}`;
                 resultDiv.style.display = 'block';
                 cargarExtractos();
                 document.getElementById('upload-card').style.display = 'block';
             } else {
-                let errHtml = `<div class="result-error">❌ Error procesando el PDF</div>`;
-                if (data.error) errHtml += `<div class="result-error-detail">${data.error}</div>`;
-                if (data.logs && data.logs.length > 0) errHtml += `<div style="margin-top:8px"><strong>Logs:</strong><pre class=\"upload-logs\">${data.logs.join('\n')}</pre></div>`;
-                resultDiv.innerHTML = errHtml;
+                document.getElementById('upload-card').style.display = 'block';
+                const resultDiv = document.getElementById('upload-result');
+                resultDiv.innerHTML = `<div class="result-error"><span class="result-icon">❌</span><div class="result-info"><strong>Error procesando el PDF</strong><p>${data.error || 'Error desconocido'}</p></div></div>`;
+                if (data.logs && data.logs.length > 0) mostrarLogs(data.logs);
                 resultDiv.style.display = 'block';
                 document.getElementById('upload-card').style.display = 'block';
             }
         })
         .catch(err => {
-            clearInterval(intervalId);
             document.getElementById('upload-progress').style.display = 'none';
             document.getElementById('upload-card').style.display = 'block';
-            alert('Error de conexión: ' + err);
+            mostrarError('Error de conexión');
         });
+}
+
+function filtrarLogs(logs) {
+    const keywords = ['[OK]', '[ERROR]', '[SKIP]', 'RESULTADO', 'Procesando', 'Procesados', 'completado', 'fallo', 'exitosos', 'fallidos'];
+    return logs.filter(l => {
+        const clean = l.trim();
+        if (!clean) return false;
+        if (clean.startsWith('=') || clean.startsWith('-')) return false;
+        return keywords.some(k => clean.includes(k));
+    });
+}
+
+function mostrarError(msg) {
+    const resultDiv = document.getElementById('upload-result');
+    resultDiv.innerHTML = `<div class="result-error"><span class="result-icon">❌</span><div class="result-info"><strong>Error</strong><p>${msg}</p></div></div>`;
+    resultDiv.style.display = 'block';
+}
+
+function mostrarLogs(logs) {
+    const lineas = filtrarLogs(logs);
+    if (lineas.length === 0) return;
+    const resultDiv = document.getElementById('upload-result');
+    const existing = resultDiv.querySelector('.upload-resumen');
+    if (existing) existing.remove();
+    resultDiv.insertAdjacentHTML('beforeend', `<div class="upload-resumen">${lineas.map(l => `<div class="upload-resumen-linea">${l}</div>`).join('')}</div>`);
 }
 
 function cargarExtractos() {
