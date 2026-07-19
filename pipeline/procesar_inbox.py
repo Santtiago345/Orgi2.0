@@ -419,11 +419,12 @@ def ejecutar_pipeline():
     print(f"{'='*70}")
 
     scripts = [
-        ("analisis_nequi_completo.py", os.path.join(BASE, "analysis", "analisis_nequi_completo.py"), "Parseando extractos de Nequi a DB..."),
-        ("analisis_daviplata_completo.py", os.path.join(BASE, "analysis", "analisis_daviplata_completo.py"), "Parseando extractos de Daviplata a DB..."),
-        ("analisis_dale_completo.py", os.path.join(BASE, "analysis", "analisis_dale_completo.py"), "Parseando extractos de Dale a DB..."),
-        ("analisis_tarjetas_completo.py", os.path.join(BASE, "analysis", "analisis_tarjetas_completo.py"), "Parseando extractos de Tarjetas de Credito a DB..."),
-        ("build_final_db.py", os.path.join(BASE, "scripts", "build_final_db.py"), "Construyendo base de datos final consolidada (incluyendo cruces y diferidos)..."),
+        ("analisis_nequi_completo.py", os.path.join(BASE, "analysis", "analisis_nequi_completo.py"), "Parseando extractos de Nequi..."),
+        ("analisis_nu_completo.py", os.path.join(BASE, "analysis", "analisis_nu_completo.py"), "Parseando extractos de Nu Bank..."),
+        ("analisis_rappicard_completo.py", os.path.join(BASE, "analysis", "analisis_rappicard_completo.py"), "Parseando extractos de RappiCard..."),
+        ("analisis_daviplata_completo.py", os.path.join(BASE, "analysis", "analisis_daviplata_completo.py"), "Parseando extractos de Daviplata..."),
+        ("analisis_dale_completo.py", os.path.join(BASE, "analysis", "analisis_dale_completo.py"), "Parseando extractos de Dale..."),
+        ("build_final_db.py", os.path.join(BASE, "scripts", "build_final_db.py"), "Construyendo base de datos final..."),
     ]
 
     for script, ruta, desc in scripts:
