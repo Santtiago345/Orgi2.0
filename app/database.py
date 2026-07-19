@@ -18,17 +18,34 @@ def get_db_completa():
 def calcular_balance():
     conn = get_db()
     c = conn.cursor()
+    
+    c.execute("""SELECT COALESCE(SUM(valor),0) FROM transacciones 
+        WHERE es_ingreso=1 AND entidad IN ('nequi','dale','daviplata','myfinance')""")
+    ing_cuentas = c.fetchone()[0]
+    c.execute("""SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones 
+        WHERE es_ingreso=0 AND valor < 0 AND entidad IN ('nequi','dale','daviplata','myfinance')""")
+    eg_cuentas = c.fetchone()[0]
+    
+    c.execute("""SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones 
+        WHERE es_ingreso=0 AND valor < 0 AND entidad IN ('nu','rappicard')""")
+    deuda_tc = c.fetchone()[0]
+    
+    c.execute("SELECT COALESCE(SUM(ABS(valor_total)),0) FROM compras_diferidas")
+    deuda_tc += c.fetchone()[0]
+    
     c.execute("SELECT COALESCE(SUM(valor),0) FROM transacciones WHERE es_ingreso=1")
     ingresos = c.fetchone()[0]
-    
     c.execute("SELECT COALESCE(SUM(ABS(valor)),0) FROM transacciones WHERE es_ingreso=0 AND valor < 0")
     gastos = c.fetchone()[0]
     
-    c.execute("SELECT COALESCE(SUM(ABS(valor_total)),0) FROM compras_diferidas")
-    gastos += c.fetchone()[0]
-    
     conn.close()
-    return round(ingresos - gastos), round(ingresos), round(gastos)
+    return {
+        "balance": round(ing_cuentas - eg_cuentas),
+        "ingresos": round(ingresos),
+        "gastos": round(gastos),
+        "deuda_tc": round(deuda_tc),
+        "balance_cuentas": round(ing_cuentas - eg_cuentas),
+    }
 
 def obtener_rango_fechas(periodo, desde=None, hasta=None):
     hoy = date.today()

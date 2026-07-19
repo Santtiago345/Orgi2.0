@@ -5,11 +5,14 @@
 
     <section class="balance-section">
         <div class="balance-card">
-            <span class="balance-label">Balance Total</span>
+            <span class="balance-label">Balance Efectivo</span>
             <span class="balance-value" id="balance-total">{{ balance_fmt }}</span>
             <div class="balance-detalle">
                 <span class="balance-item positivo">↑ Ingresos {{ total_ingresos_fmt }}</span>
                 <span class="balance-item negativo">↓ Gastos {{ total_gastos_fmt }}</span>
+            </div>
+            <div class="balance-tc" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.2);font-size:13px;opacity:0.9">
+                💳 Deuda tarjetas: <strong>{{ deuda_tc_fmt }}</strong>
             </div>
         </div>
     </section>

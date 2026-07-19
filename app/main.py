@@ -87,14 +87,16 @@ def color_categoria(cat):
 
 @app.context_processor
 def inject_globals():
-    balance, ingresos, gastos = calcular_balance()
+    b = calcular_balance()
     return {
         "paginas": PAGINAS,
         "pagina_actual": request.path,
-        "balance": balance,
-        "balance_fmt": formatear_pesos(balance),
-        "total_ingresos_fmt": formatear_pesos(ingresos),
-        "total_gastos_fmt": formatear_pesos(gastos),
+        "balance": b["balance_cuentas"],
+        "balance_fmt": formatear_pesos(b["balance_cuentas"]),
+        "total_ingresos_fmt": formatear_pesos(b["ingresos"]),
+        "total_gastos_fmt": formatear_pesos(b["gastos"]),
+        "deuda_tc": b["deuda_tc"],
+        "deuda_tc_fmt": formatear_pesos(b["deuda_tc"]),
         "categorias": CATEGORIAS,
         "icono_categoria": icono_categoria,
     }
@@ -275,10 +277,10 @@ def api_agregar_transaccion():
         return jsonify({"error": "Descripcion y valor diferentes de 0 requeridos"}), 400
 
     new_id = agregar_transaccion(fecha, descripcion, valor, categoria, tipo, notas, metodo_pago=metodo_pago)
-    balance, ing, gas = calcular_balance()
+    b = calcular_balance()
     return jsonify({
         "ok": True, "id": new_id,
-        "balance_fmt": formatear_pesos(balance),
+        "balance_fmt": formatear_pesos(b["balance_cuentas"]),
         "ingresos_fmt": formatear_pesos(ing),
         "gastos_fmt": formatear_pesos(gas),
     })
