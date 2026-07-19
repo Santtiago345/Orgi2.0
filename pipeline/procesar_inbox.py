@@ -62,41 +62,47 @@ def hash_archivo(ruta):
     return h.hexdigest()
 
 FUENTES = {
-    "nequi": {
-        "dir": os.path.join(BASE, "data", "nequi"),
-        "tipo": "cuenta",
-        "keywords": ["extracto de deposito", "extracto de dep", "nequi"],
-        "identificadores": ["Nequi", "EXT_NEQUI"],
-    },
     "cuenta_nu": {
         "dir": os.path.join(BASE, "data", "cuenta_nu"),
         "tipo": "cuenta",
         "keywords": ["cuenta nu", "dinero en tu cuenta nu", "cajitas", "tu dinero al inicio del mes"],
         "identificadores": ["Cuenta Nu", "CUENTA NU"],
+        "filename_prefixes": ["cuentanu", "cuenta_nu"],
     },
-    "nu": {
-        "dir": os.path.join(BASE, "data", "nu"),
-        "tipo": "tarjeta_credito",
-        "keywords": ["nu financiera", "ayuda@nu.com.co", "nu colombia"],
-        "identificadores": ["Nu Financiera"],
+    "nequi": {
+        "dir": os.path.join(BASE, "data", "nequi"),
+        "tipo": "cuenta",
+        "keywords": ["extracto de deposito", "extracto de dep", "nequi"],
+        "identificadores": ["Nequi", "EXT_NEQUI"],
+        "filename_prefixes": ["nequi", "extracto_nequi"],
     },
     "daviplata": {
         "dir": os.path.join(BASE, "data", "daviplata"),
         "tipo": "cuenta",
         "keywords": ["daviplata", "depósito de dinero electrónico daviplata", "deposito de dinero electronico daviplata"],
         "identificadores": ["Daviplata", "DAVIPLATA"],
+        "filename_prefixes": ["daviplata"],
     },
     "dale": {
         "dir": os.path.join(BASE, "data", "dale"),
         "tipo": "cuenta",
         "keywords": ["dale", "dale de davivienda", "davivienda dale"],
         "identificadores": ["Dale", "DALE"],
+        "filename_prefixes": ["dale", "extracto_dale"],
+    },
+    "nu": {
+        "dir": os.path.join(BASE, "data", "nu"),
+        "tipo": "tarjeta_credito",
+        "keywords": ["nu financiera", "ayuda@nu.com.co", "nu colombia"],
+        "identificadores": ["Nu Financiera"],
+        "filename_prefixes": ["nu_", "nu-", "extracto_nu"],
     },
     "rappicard": {
         "dir": os.path.join(BASE, "data", "rappicard"),
         "tipo": "tarjeta_credito",
         "keywords": ["rappicard", "credit_card_statement", "davivienda s.a", "banco davivienda"],
         "identificadores": ["RappiCard", "Davivienda"],
+        "filename_prefixes": ["rappicard", "rappicard_"],
     },
 }
 
@@ -132,8 +138,7 @@ def extraer_texto(pdf_path):
 # ============================================================
 # 2. IDENTIFICACIÓN DE BANCO
 # ============================================================
-def identificar_banco(texto):
-    """Detecta qué banco generó el extracto."""
+def identificar_banco(texto, filename=None):
     t = texto.lower()
     for banco, info in FUENTES.items():
         for kw in info["keywords"]:
@@ -142,6 +147,12 @@ def identificar_banco(texto):
         for ident in info["identificadores"]:
             if ident.lower() in t:
                 return banco
+    if filename:
+        fn = filename.lower().replace(" ", "_")
+        for banco, info in FUENTES.items():
+            for prefix in info.get("filename_prefixes", []):
+                if fn.startswith(prefix):
+                    return banco
     return None
 
 
@@ -208,6 +219,15 @@ def extraer_periodo_dale(texto):
         mes = MESES_LARGO.get(m.group(1).lower())
         if mes:
             return int(m.group(2)), mes
+    return None, None
+
+def extraer_periodo_desde_filename(filename):
+    m = re.search(r'(\d{4})[_-](\d{2})', filename)
+    if m:
+        anio = int(m.group(1))
+        mes = int(m.group(2))
+        if 2000 <= anio <= 2099 and 1 <= mes <= 12:
+            return anio, mes
     return None, None
 
 def extraer_periodo_daviplata(texto):
@@ -322,7 +342,7 @@ def procesar_pdf(ruta_pdf):
         return False
 
     # 6c. Identificar banco
-    banco = identificar_banco(texto)
+    banco = identificar_banco(texto, nombre_orig)
     if not banco:
         print(f"  [SKIP] No se pudo identificar el banco en {nombre_orig}")
         print(f"    Primeros 200 chars: {texto[:200]}")
@@ -333,6 +353,8 @@ def procesar_pdf(ruta_pdf):
     # 6d. Extraer período
     extractor = EXTRACTORES[banco]
     anio, mes = extractor(texto)
+    if not anio or not mes:
+        anio, mes = extraer_periodo_desde_filename(nombre_orig)
     if not anio or not mes:
         print(f"  [SKIP] No se pudo extraer el período de {nombre_orig}")
         limpiar_temp(temp_dir)
