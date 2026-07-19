@@ -20,7 +20,7 @@ from collections import defaultdict, Counter
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PDF_DIR = os.path.join(BASE, "PDFs_Gmail NEQUI")
 UNLOCKED_DIR = os.path.join(PDF_DIR, "unlocked")
-PASSWORD = "REDACTED_PWD"
+PASSWORD = os.environ.get("PDF_PASSWORD", "")
 DB_PATH = os.path.join(PDF_DIR, "nequi_finanzas.db")
 JSON_PATH = os.path.join(PDF_DIR, "nequi_transacciones_completo.json")
 

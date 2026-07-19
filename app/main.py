@@ -1,10 +1,12 @@
 from flask import Flask, jsonify, render_template, request
 from datetime import datetime, date
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from werkzeug.utils import secure_filename
 import json, os, subprocess, sys
-
-load_dotenv()
 
 from .database import (
     calcular_balance, obtener_rango_fechas, navegar_periodo, es_periodo_actual,

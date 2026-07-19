@@ -4,7 +4,7 @@ PROCESAR INBOX — Pipeline automatizado de ingesta de PDFs
 FLUJO:
   1. Escanea data/inbox/ en busca de PDFs nuevos
   2. Por cada PDF:
-     a. Desbloquea con contraseña REDACTED_PWD
+      a. Desbloquea con contraseña configurada en PDF_PASSWORD
      b. Identifica banco (Nequi, Nu, RappiCard) extrayendo texto
      c. Extrae período (año, mes) del contenido
      d. Renombra con formato: {banco}_{YYYY-MM}_{tipo}.pdf
@@ -23,9 +23,11 @@ USO:
 import os, re, sys, shutil, subprocess, json, hashlib
 import pdfplumber
 from pypdf import PdfReader, PdfWriter
-from dotenv import load_dotenv
-
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INBOX_DIR = os.path.join(BASE, "data", "inbox")
