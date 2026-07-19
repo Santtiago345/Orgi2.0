@@ -78,12 +78,14 @@ def parse_daviplata_pdf(filepath):
 
     pm = re.search(r"Periodo del extracto entre:\s*(\w+)\s+(\d{4})\s*[-–—]\s*(\w+)\s+(\d{4})", text, re.IGNORECASE)
     if pm:
+        mes_ini = MESES_LARGO.get(pm.group(1).lower())
+        anio_ini = int(pm.group(2))
         mes_fin = MESES_LARGO.get(pm.group(3).lower())
         anio_fin = int(pm.group(4))
-        if mes_fin:
+        if mes_ini and mes_fin:
             result["anio"] = anio_fin
             result["mes"] = mes_fin
-            result["periodo"] = f"{anio_fin}/{mes_fin:02d}"
+            result["periodo"] = f"{anio_ini}/{mes_ini:02d} - {anio_fin}/{mes_fin:02d}"
 
     sm = re.search(r"Saldo DaviPlata\s*\$?\s*([\d.,]+)", text)
     if sm: result["saldo"] = parse_colombian_currency(sm.group(1))
