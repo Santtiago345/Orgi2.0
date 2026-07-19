@@ -26,6 +26,7 @@ from .database import (
     obtener_top_gastos, obtener_resumen_anual,
     obtener_sin_cruzar, obtener_sugerencias_cruce,
     cruzar_transaccion, obtener_estadisticas_cruce,
+    get_db,
 )
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
